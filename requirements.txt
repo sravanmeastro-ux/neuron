@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pillow
+psutil
+openai
+uiautomation
+playwright
+openai-whisper
+faster-whisper
+numpy
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

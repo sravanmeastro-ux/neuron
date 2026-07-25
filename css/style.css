@@ -1,0 +1,214 @@
+:root {
+  --cyan: #00e5ff;
+  --cyan-dim: rgba(0, 229, 255, 0.35);
+  --cyan-faint: rgba(0, 229, 255, 0.08);
+  --bg: #030a12;
+  --text: #baf3ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #071522 0%, var(--bg) 70%);
+  color: var(--text);
+  font-family: "Segoe UI", "Consolas", monospace;
+  cursor: default;
+}
+
+/* ---------- HUD corners ---------- */
+.hud-corner {
+  position: fixed;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--cyan-dim);
+  z-index: 10;
+  pointer-events: none;
+}
+.top-left     { top: 8px;    left: 8px;   border-right: none; border-bottom: none; }
+.top-right    { top: 8px;    right: 8px;  border-left: none;  border-bottom: none; }
+.bottom-left  { bottom: 8px; left: 8px;   border-right: none; border-top: none; }
+.bottom-right { bottom: 8px; right: 8px;  border-left: none;  border-top: none; }
+
+/* ---------- Overlays ---------- */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--cyan-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--cyan-faint) 1px, transparent 1px);
+  background-size: 36px 36px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.scanline {
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 90px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0, 229, 255, 0.05),
+    transparent
+  );
+  animation: scan 6s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes scan {
+  0%   { top: -90px; }
+  100% { top: 100%; }
+}
+
+/* ---------- Header ---------- */
+.hud-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 22px 0;
+  z-index: 5;
+}
+
+.title-block h1 {
+  font-size: 20px;
+  font-weight: 300;
+  letter-spacing: 8px;
+  color: var(--cyan);
+  text-shadow: 0 0 12px var(--cyan-dim), 0 0 30px var(--cyan-dim);
+}
+
+.subtitle {
+  display: block;
+  font-size: 7px;
+  letter-spacing: 3px;
+  opacity: 0.5;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.sys-readout {
+  text-align: right;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  opacity: 0.8;
+}
+
+#brain-status {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+#brain-status.brain-online  { color: #4dffa6; text-shadow: 0 0 8px rgba(77, 255, 166, 0.5); }
+#brain-status.brain-offline { color: #ff5f6b; text-shadow: 0 0 8px rgba(255, 95, 107, 0.5); }
+
+/* Mic level meter */
+#mic-meter {
+  display: block;
+  margin-top: 6px;
+  margin-left: auto;
+  width: 90px;
+  height: 4px;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid var(--cyan-dim);
+  overflow: hidden;
+}
+#mic-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  transition: width 0.08s linear;
+}
+
+/* ---------- Main / canvas ---------- */
+main {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+}
+
+#blob-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.status {
+  position: absolute;
+  bottom: 64px;
+  width: 100%;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 5px;
+  color: var(--cyan);
+  opacity: 0.85;
+  text-shadow: 0 0 10px var(--cyan-dim);
+  animation: pulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.95; }
+}
+
+/* ---------- Footer transcript ---------- */
+.hud-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 22px 12px;
+  z-index: 5;
+}
+
+.response {
+  font-size: 12px;
+  letter-spacing: 1px;
+  min-height: 18px;
+  margin-bottom: 8px;
+  color: #9fffd0;
+  text-shadow: 0 0 8px rgba(77, 255, 166, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transcript-label {
+  font-size: 7px;
+  letter-spacing: 3px;
+  opacity: 0.45;
+  margin-bottom: 4px;
+}
+
+.transcript {
+  font-size: 12px;
+  letter-spacing: 1px;
+  min-height: 18px;
+  color: var(--text);
+  border-top: 1px solid var(--cyan-faint);
+  padding-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.25);
+}
+.transcript.interim { opacity: 0.6; font-style: italic; }

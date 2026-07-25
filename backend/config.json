@@ -1,0 +1,55 @@
+{
+  "llm": {
+    "enabled": true,
+    "provider": "ollama",
+    "base_url": "http://localhost:11434/v1",
+    "api_key": "ollama",
+    "model": "qwen3:14b",
+    "temperature": 0.1,
+    "num_predict": 140,
+    "num_ctx": 3072,
+    "timeout_seconds": 18,
+    "_comment_local": "think:false via native Ollama API. Low num_predict for voice speed."
+  },
+  "vision": {
+    "enabled": true,
+    "model": "qwen2.5vl:7b",
+    "max_steps": 4,
+    "glance_before_commands": true,
+    "glance_vlm_auto": false,
+    "glance_ttl_seconds": 4.0,
+    "glance_max_width": 896,
+    "glance_jpeg_quality": 45,
+    "act_max_width": 1024,
+    "act_jpeg_quality": 50,
+    "_comment": "Fast mode: structural glance (window titles) by default. VLM only for explicit look/describe/computer-use fallback. Sticky monitor focus via look-at-monitor-N."
+  },
+  "stt": {
+    "enabled": true,
+    "provider": "openai-whisper",
+    "model": "turbo",
+    "device": "cuda",
+    "compute_type": "float16",
+    "language": "en",
+    "beam_size": 1,
+    "speech_rms": 0.012,
+    "silence_rms": 0.006,
+    "silence_ms": 450,
+    "min_speech_ms": 280,
+    "max_speech_ms": 12000,
+    "_comment": "Free self-hosted OpenAI Whisper from github.com/openai/whisper (model turbo on CUDA). No paid API."
+  },
+  "auto_learn": {
+    "enabled": true,
+    "settle_seconds": 2.5,
+    "fg_settle_seconds": 1.5,
+    "poll_seconds": 2.0,
+    "refresh_hours": 24,
+    "vision_on_sparse": true,
+    "_comment": "When an app opens or becomes focused, scan its UI and save how-to knowledge. Vision/OCR runs when UIA finds few controls."
+  },
+  "assistant": {
+    "name": "NEURON",
+    "personality": "witty, confident, loyal, concise. Dry British humor like JARVIS. Never rude."
+  }
+}

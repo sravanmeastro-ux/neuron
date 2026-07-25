@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>N.E.U.R.O.N</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- HUD frame corners -->
+  <div class="hud-corner top-left"></div>
+  <div class="hud-corner top-right"></div>
+  <div class="hud-corner bottom-left"></div>
+  <div class="hud-corner bottom-right"></div>
+
+  <!-- Grid + scanline overlays -->
+  <div class="grid-overlay"></div>
+  <div class="scanline"></div>
+
+  <header class="hud-header">
+    <div class="title-block">
+      <h1>N.E.U.R.O.N</h1>
+      <span class="subtitle">Neural Engine for Unified Reasoning &amp; Operational Navigation</span>
+    </div>
+    <div class="sys-readout">
+      <span id="clock">--:--:--</span>
+      <span id="brain-status" class="brain-offline">BRAIN: OFFLINE</span>
+      <span id="mic-meter"><i id="mic-meter-fill"></i></span>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="blob-canvas"></canvas>
+    <div id="status" class="status">STARTING...</div>
+  </main>
+
+  <footer class="hud-footer">
+    <div id="response" class="response">&nbsp;</div>
+    <div class="transcript-label">AUDIO INPUT</div>
+    <div id="transcript" class="transcript">&nbsp;</div>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

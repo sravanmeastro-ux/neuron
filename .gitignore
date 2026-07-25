@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# NEURON runtime / local state
+backend/.neuron-chrome/
+backend/memory_store.json
+backend/pc_inventory.json
+backend/app_memory/
+backend/_last_elements.txt
+backend/_last_*.txt
+
+# Logs
+*.log
+@AutomationLog.txt
+**/@AutomationLog.txt
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Screenshots / temp captures
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
