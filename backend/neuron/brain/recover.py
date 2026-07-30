@@ -64,16 +64,23 @@ def deterministic_recovery(
             alts.append({"action": "browser_click", "args": {"index": 0}})
         return alts[:3] or None
 
-    if action in ("click_ui_element", "find_ui_element"):
+    if action in ("click_ui_element", "find_ui_element", "click_element", "find_element"):
         name = (args.get("name") or args.get("text") or "").strip()
         if name:
-            find = {"action": "find_ui_element", "args": {"name": name}}
-            click = {"action": "click_ui_element", "args": {"name": name}}
+            find = {"action": "find_element", "args": {"name": name}}
+            click = {"action": "click_element", "args": {"name": name}}
             if unused(find):
                 alts.append(find)
             if unused(click):
                 alts.append(click)
-            return alts[:2] or None
+            # Legacy aliases
+            find_u = {"action": "find_ui_element", "args": {"name": name}}
+            click_u = {"action": "click_ui_element", "args": {"name": name}}
+            if unused(find_u):
+                alts.append(find_u)
+            if unused(click_u):
+                alts.append(click_u)
+            return alts[:3] or None
 
     if action in ("browser_open", "open_website"):
         site = (args.get("site") or args.get("url") or args.get("name") or "").strip()

@@ -26,8 +26,9 @@
   let currentAudio = null;
 
   function isStopTalk(text) {
-    return /\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b/i.test(
-      text || ""
+    // V2 interrupt phrases — must win even mid-sentence / mid-task.
+    return /(?:hey\s+)?(?:neuron|jarvis)[,.]?\s+stop\b|stop[,.]?\s+(?:neuron|jarvis)\b|stop\s+talking|stop\s+speaking|be\s+quiet|shut\s+up|\bsilence\b|\bhalt\b|\babort\b|cancel\s+that|never\s*mind|cut\s+it\s+out|^(?:please\s+)?stop(?:\s+please)?[.!]?$/i.test(
+      (text || "").trim()
     );
   }
 
@@ -244,7 +245,7 @@
     if (!cleaned) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Always allow stop talking, even while WORKING / speaking.
+    // Always allow interrupt, even while WORKING / speaking.
     if (isStopTalk(cleaned)) {
       stopTalking();
       ws.send(JSON.stringify({ type: "transcript", text: cleaned }));
@@ -254,7 +255,8 @@
     const now = Date.now();
     const norm = cleaned.toLowerCase().replace(/\s+/g, " ");
     if (busy) {
-      setStatus("WORKING...");
+      // Do not queue new commands; interrupt with "Neuron, stop."
+      setStatus("WORKING... (say Neuron, stop)");
       return;
     }
     if (norm === lastSent && now - lastSentAt < DEDUPE_MS) return;
@@ -282,7 +284,7 @@
     if (voice) u.voice = voice;
 
     // Do NOT mute STT for the whole utterance — user must be able to say
-    // "stop talking". Echo cancellation handles most self-hearing.
+    // "Neuron, stop". Echo cancellation handles most self-hearing.
     speaking = true;
     muted = false;
     sendControl({ mute: false });

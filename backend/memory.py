@@ -23,18 +23,33 @@ def _save(data: dict) -> None:
     STORE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def remember(key: str, value: str) -> None:
-    data = _load()
-    data.setdefault("facts", {})[key.lower().strip()] = value.strip()
-    _save(data)
+def remember(key: str, value: str, *, force: bool = False) -> str:
+    """Write a durable fact via PersistentMemory (allowlisted unless force=True)."""
     try:
-        from neuron.memory import store as sql
-        sql.remember(key, value)
+        from neuron.memory import scopes
+        ok, msg = scopes.persistent().remember(key, value, force=force)
+        return msg if ok else msg
     except Exception:
-        pass
+        # Fallback: legacy direct write
+        data = _load()
+        data.setdefault("facts", {})[key.lower().strip()] = value.strip()
+        _save(data)
+        try:
+            from neuron.memory import store as sql
+            sql.remember(key, value)
+        except Exception:
+            pass
+        return f"Remembered {key}."
 
 
 def recall(key: str):
+    try:
+        from neuron.memory import scopes
+        val = scopes.persistent().recall(key)
+        if val is not None:
+            return val
+    except Exception:
+        pass
     try:
         from neuron.memory import store as sql
         val = sql.recall(key)
@@ -45,7 +60,22 @@ def recall(key: str):
     return _load().get("facts", {}).get(key.lower().strip())
 
 
+def forget(key: str) -> str:
+    try:
+        from neuron.memory import scopes
+        _ok, msg = scopes.persistent().forget(key)
+        return msg
+    except Exception as exc:
+        return str(exc)
+
+
 def log(role: str, text: str) -> None:
+    # Session scope (this run)
+    try:
+        from neuron.memory import scopes
+        scopes.session().log(role, text)
+    except Exception:
+        pass
     data = _load()
     hist = data.setdefault("history", [])
     hist.append({"t": datetime.now().isoformat(timespec="seconds"), "role": role, "text": text})
@@ -69,30 +99,50 @@ def log(role: str, text: str) -> None:
 
 
 def context_blob(request: str = "") -> str:
-    """Compact context string handed to the LLM each request."""
-    data = _load()
-    facts = data.get("facts", {})
+    """Compact context string handed to the LLM each request.
+
+    Prefers scoped Working / Session / Persistent blobs, then legacy extras.
+    """
+    lines: list[str] = []
     try:
-        from neuron.memory import store as sql
-        sql.ensure()
-        conn = sql._conn()
-        rows = conn.execute("SELECT key, value FROM facts LIMIT 12").fetchall()
-        conn.close()
-        if rows:
-            facts = {r["key"]: r["value"] for r in rows}
+        from neuron.memory import scopes
+        scoped = scopes.context_blob(request)
+        if scoped:
+            lines.append(scoped)
     except Exception:
         pass
-    lines = []
-    if facts:
-        lines.append("Known facts:")
-        for i, (k, v) in enumerate(facts.items()):
-            if i >= 12:
-                break
-            lines.append(f"- {k}: {v}")
-    hist = data.get("history", [])[-4:]
-    if hist:
-        lines.append("Recent conversation:")
-        lines += [f"- {h['role']}: {h['text']}" for h in hist]
+
+    # Legacy durable facts only if scopes did not already emit PERSISTENT_MEMORY
+    if not any(l.startswith("PERSISTENT_MEMORY:") for chunk in lines for l in chunk.splitlines()):
+        data = _load()
+        facts = data.get("facts", {})
+        try:
+            from neuron.memory import store as sql
+            sql.ensure()
+            conn = sql._conn()
+            rows = conn.execute("SELECT key, value FROM facts LIMIT 12").fetchall()
+            conn.close()
+            if rows:
+                facts = {r["key"]: r["value"] for r in rows}
+        except Exception:
+            pass
+        if facts:
+            lines.append("Known facts:")
+            for i, (k, v) in enumerate(facts.items()):
+                if i >= 12:
+                    break
+                lines.append(f"- {k}: {v}")
+        # Session chat already in SESSION_MEMORY; keep JSON history only if session empty
+        try:
+            from neuron.memory import scopes
+            sess_empty = not scopes.session().conversation
+        except Exception:
+            sess_empty = True
+        if sess_empty:
+            hist = data.get("history", [])[-4:]
+            if hist:
+                lines.append("Recent conversation:")
+                lines += [f"- {h['role']}: {h['text']}" for h in hist]
     try:
         import app_learner
         learned = app_learner.knowledge_for_prompt(request)

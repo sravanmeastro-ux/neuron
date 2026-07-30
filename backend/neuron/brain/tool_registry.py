@@ -44,7 +44,7 @@ def register(
         handler=handler,
         description=description or name,
         args_schema=args_schema or {},
-        risk=risk or DEFAULT_RISK.get(name, "medium"),
+        risk=risk or DEFAULT_RISK.get(name, "confirm"),
         verify=verify,
     )
 
@@ -90,7 +90,22 @@ def tools_doc(limit: int = 80) -> str:
         "Browser: DOM/a11y first (browser_get_elements/find/click/type). Vision/mouse last."
     )
     lines.append(
-        "UI: prefer get_ui_tree → find_ui_element → click_ui_element before mouse coords / computer_use."
+        "UI: click_element / click_ui_element go through Element Resolver "
+        "(DOM → UIA → OCR → Vision → mouse). Prefer that over raw click / move_mouse / computer_use."
+    )
+    lines.append(
+        "DOMAIN SKILLS: prefer youtube.search / windows.move_to_monitor / "
+        "spotify.play / discord.open_channel / files.find / blender.open_project "
+        "over ad-hoc multi-step plans when they match."
+    )
+    try:
+        from neuron.safety.levels import tier_prompt
+        lines.append(tier_prompt())
+    except Exception:
+        pass
+    lines.append(
+        "LEARNING: 'learn how I …' records a PROCEDURE skill (clicks→steps). "
+        "Never rewrite NEURON source. Reuse with the saved phrase or run_procedure{id}."
     )
     return "\n".join(lines)
 
@@ -102,6 +117,35 @@ def ensure_bootstrapped() -> None:
     _BOOTSTRAPPED = True
     _bootstrap_legacy()
     _bootstrap_new()
+    _bootstrap_skills()
+    _bootstrap_procedures()
+
+
+def _bootstrap_skills() -> None:
+    try:
+        from neuron.skills.registry import bootstrap_skills
+        n = bootstrap_skills(register)
+        print(f"[tools] registered {n} domain skills", flush=True)
+    except Exception as exc:
+        print(f"[tools] skills bootstrap skipped: {exc}", flush=True)
+
+
+def _bootstrap_procedures() -> None:
+    """Phase 9 learned procedures + run_procedure tool."""
+    try:
+        from neuron.learning.procedures import bootstrap_learned_skills, run_procedure_tool
+        register(
+            "run_procedure",
+            run_procedure_tool,
+            description="Run a learned procedure by id or matching phrase",
+            args_schema={"id": "str", "query": "str"},
+            risk="safe",
+            overwrite=True,
+        )
+        n = bootstrap_learned_skills()
+        print(f"[tools] registered {n} learned/builtin procedures", flush=True)
+    except Exception as exc:
+        print(f"[tools] procedures bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_legacy() -> None:
@@ -126,6 +170,8 @@ def _bootstrap_legacy() -> None:
         "play_by_title": {"title": "str"},
         "computer_use": {"goal": "str"},
         "click_ui_element": {"name": "str"},
+        "click_element": {"name": "str"},
+        "find_element": {"name": "str"},
         "describe_screen": {"request": "str"},
     }
     descriptions = {
@@ -138,7 +184,9 @@ def _bootstrap_legacy() -> None:
         "youtube_home": "Go to YouTube homepage (do not play)",
         "play_result": "Play the Nth visible YouTube video on screen",
         "computer_use": "Vision+mouse for unknown on-screen UI",
-        "click_ui_element": "Click a UI Automation element by accessible name",
+        "click_ui_element": "Click via Element Resolver (DOM→UIA→OCR→Vision)",
+        "click_element": "Alias of click_ui_element — semantic click(\"Search\")",
+        "find_element": "Resolve element without clicking (reports source + coords)",
         "get_ui_tree": "Read foreground window UI labels",
     }
     for name, fn in executors.items():
@@ -158,7 +206,7 @@ def _bootstrap_legacy() -> None:
             handler,
             description=descriptions.get(name, f"legacy:{name}"),
             args_schema=schemas.get(name, {}),
-            risk=DEFAULT_RISK.get(name, "medium"),
+            risk=DEFAULT_RISK.get(name, "confirm"),
         )
 
 
@@ -199,7 +247,9 @@ def _bootstrap_new() -> None:
         ("get_ui_tree", uia_tools.get_ui_tree, "Inspect foreground UI tree (name, type, automationId, bounds)", {"depth": "int", "limit": "int"}, True),
         ("get_active_window_elements", uia_tools.get_active_window_elements, "List interactive elements in the active window", {"limit": "int"}, True),
         ("find_ui_element", uia_tools.find_ui_element, "Find/rank UI element by name (e.g. Settings)", {"name": "str", "control_type": "str"}, True),
-        ("click_ui_element", uia_tools.click_ui_element, "Click best-ranked UI element by semantic name", {"name": "str", "control_type": "str"}, True),
+        ("click_ui_element", uia_tools.click_ui_element, "Click via Element Resolver: DOM→UIA→OCR→Vision→mouse", {"name": "str", "control_type": "str"}, True),
+        ("click_element", uia_tools.click_element, "Semantic click(\"Search\") via Element Resolver cascade", {"name": "str", "index": "int"}, True),
+        ("find_element", uia_tools.find_element, "Resolve click target without acting (source + coords)", {"name": "str"}, True),
         ("get_element_text", uia_tools.get_element_text, "Read text/value from a UI element", {"name": "str"}, True),
         ("get_element_bounds", uia_tools.get_element_bounds, "Get bounding rectangle of a UI element", {"name": "str"}, True),
         ("capture_screen", screen_tools.capture_screen, "Capture primary or all monitors (resized)", {"all": "bool"}, True),
@@ -240,7 +290,7 @@ def _bootstrap_new() -> None:
             _make(fn),
             description=desc,
             args_schema=schema,
-            risk=DEFAULT_RISK.get(name, "low"),
+            risk=DEFAULT_RISK.get(name, "safe"),
             overwrite=overwrite,
         )
 

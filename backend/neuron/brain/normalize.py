@@ -3,6 +3,9 @@
 Accepts both:
   {"tool": "open_app", "arguments": {"application": "Blender"}}
   {"action": "open_app", "args": {"name": "Blender"}}
+
+Closed-loop enrichment (backward compatible):
+  each step also gets target, expected_result, timeout, retry_limit.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+
+from neuron.brain.step import DEFAULT_RETRY_LIMIT, DEFAULT_TIMEOUT, enrich_step_dict
 
 # Common LLM arg aliases → canonical tool parameters
 _ARG_ALIASES = {
@@ -33,6 +38,21 @@ _ARG_ALIASES = {
 }
 
 
+def _defaults_from_config() -> tuple[float, int]:
+    try:
+        from pathlib import Path
+        cfg = json.loads(
+            (Path(__file__).resolve().parent.parent.parent / "config.json").read_text(
+                encoding="utf-8"
+            )
+        ).get("agent") or {}
+        timeout = float(cfg.get("tool_timeout_seconds", DEFAULT_TIMEOUT) or DEFAULT_TIMEOUT)
+        retry = int(cfg.get("max_step_retries", DEFAULT_RETRY_LIMIT) or DEFAULT_RETRY_LIMIT)
+        return timeout, retry
+    except Exception:
+        return DEFAULT_TIMEOUT, DEFAULT_RETRY_LIMIT
+
+
 def normalize_args(args: dict | None) -> dict:
     out: dict[str, Any] = {}
     for k, v in (args or {}).items():
@@ -49,8 +69,9 @@ def normalize_args(args: dict | None) -> dict:
 def normalize_step(step: Any) -> dict | None:
     if not isinstance(step, dict):
         if isinstance(step, str) and step.strip():
-            return {"action": step.strip(), "args": {}}
-        return None
+            step = {"action": step.strip(), "args": {}}
+        else:
+            return None
     name = (
         step.get("tool")
         or step.get("action")
@@ -59,16 +80,39 @@ def normalize_step(step: Any) -> dict | None:
         or ""
     )
     name = str(name).strip()
+    # Allow youtube_search → youtube.search when dotted skill exists
+    if name and "." not in name and "_" in name:
+        dotted = name.replace("_", ".", 1)
+        # Only rewrite known domain prefixes
+        if dotted.split(".", 1)[0] in (
+            "youtube", "browser", "windows", "spotify", "discord", "files", "blender",
+        ):
+            try:
+                from neuron.brain import tool_registry
+                if tool_registry.get(dotted):
+                    name = dotted
+            except Exception:
+                pass
     if not name:
         return None
     args = step.get("arguments") or step.get("args") or step.get("params") or {}
     if not isinstance(args, dict):
         args = {}
-    return {"action": name, "args": normalize_args(args)}
+    base = {
+        "action": name,
+        "args": normalize_args(args),
+    }
+    # Preserve closed-loop fields from planner if present
+    for key in ("target", "expected_result", "expect", "expected", "timeout",
+                "timeout_seconds", "retry_limit", "retries"):
+        if key in step and step[key] not in (None, ""):
+            base[key] = step[key]
+    default_timeout, default_retry = _defaults_from_config()
+    return enrich_step_dict(base, default_timeout=default_timeout, default_retry=default_retry)
 
 
 def normalize_plan(raw: Any) -> dict:
-    """Return {say, steps:[{action,args}]} from messy LLM JSON."""
+    """Return {say, steps:[{action,args,target,expected_result,timeout,retry_limit}]}."""
     if raw is None:
         return {"say": "", "steps": []}
     if isinstance(raw, str):

@@ -1,7 +1,10 @@
 """NEURON Brain — agent entry.
 
-Phase 9 loop:
-  OBSERVE → UNDERSTAND GOAL → PLAN → ACT → OBSERVE RESULT → VERIFY → SUCCESS or RECOVER
+Closed-loop (AgentLoop / OPAVR):
+  OBSERVE → UNDERSTAND GOAL → PLAN → ACT (one step) → OBSERVE → VERIFY
+  → SUCCESS or RETRY/REPLAN → verify final goal before finish
+
+All execution goes through neuron.brain.agent_loop.AgentLoop.
 """
 
 from __future__ import annotations
@@ -11,8 +14,8 @@ from typing import Any
 
 from neuron.brain import context as ctx_mod
 from neuron.brain import intent as intent_mod
-from neuron.brain import loop as opavr
 from neuron.brain import tool_registry
+from neuron.brain.agent_loop import AgentLoop
 from neuron.brain.normalize import normalize_plan
 from neuron.brain.trace import Trace
 
@@ -39,7 +42,7 @@ def run(
     screen_ctx: str = "",
 ) -> tuple[str | None, bool, dict]:
     """
-    Full brain loop.
+    Full brain loop via AgentLoop.
 
     Returns (reply, acted, meta).
     meta.path: recipe | deterministic | llm | opavr | ask_user | rules_fallback | empty | stop
@@ -53,10 +56,12 @@ def run(
         "elapsed_ms": 0,
         "trace": [],
         "goal": None,
+        "agent_loop": True,
     }
     t0 = time.time()
     tool_registry.ensure_bootstrapped()
     tr = Trace()
+    loop = AgentLoop(confirmed=confirmed, trace=tr)
 
     intent = intent_mod.understand(raw)
     _log(f"intent kind={intent.kind} action={intent.action!r} text={intent.normalized!r}")
@@ -68,21 +73,20 @@ def run(
         meta["path"] = "stop"
         return "__STOP_SPEECH__", True, meta
 
-    # Fast path: known recipe / trivial open — still through OPAVR (verify required)
+    # Fast path: known recipe / trivial open — still through AgentLoop (verify required)
     if intent.kind in ("recipe", "deterministic") and intent.action:
         meta["path"] = intent.kind
         plan = normalize_plan({
             "say": "",
             "steps": [{"tool": intent.action, "arguments": intent.args or {}}],
         })
-        say, acted, loop_meta, goal = opavr.run_opavr(
+        say, acted, loop_meta, goal = loop.run(
             request=raw,
             context="",
             normalized=intent.normalized or raw,
             plan=plan,
-            confirmed=confirmed,
             observe_blob=f"intent={intent.kind} action={intent.action}",
-            trace=tr,
+            confirmed=confirmed,
         )
         return _finish(say, acted, meta, loop_meta, goal, tr, t0, path=intent.kind)
 
@@ -152,15 +156,14 @@ def run(
         plan_normalized = resolve.rewritten_request
         _log(f"resolved -> {plan_request!r} (conf={resolve.confidence:.2f})")
 
-    # OPAVR: plan inside loop (or rules fallback if planner down)
-    say, acted, loop_meta, goal = opavr.run_opavr(
+    # AgentLoop: plan inside loop (or rules fallback if planner down)
+    say, acted, loop_meta, goal = loop.run(
         request=plan_request,
         context=context,
         normalized=plan_normalized,
         plan=None,
-        confirmed=confirmed,
         observe_blob=snap.compact(600),
-        trace=tr,
+        confirmed=confirmed,
     )
 
     if say is None and not acted and loop_meta.get("path") == "plan_failed":
@@ -189,9 +192,11 @@ def _finish(
     path: str,
 ) -> tuple[str | None, bool, dict]:
     meta["path"] = path
+    meta["agent_loop"] = True
     meta["replanned"] = bool(loop_meta.get("replanned"))
     meta["recovered"] = bool(loop_meta.get("recovered"))
     meta["steps"] = loop_meta.get("steps") or []
+    meta["diagnoses"] = list(loop_meta.get("diagnoses") or [])
     meta["trace"] = tr.to_list()
     meta["elapsed_ms"] = int((time.time() - t0) * 1000)
     if goal is not None:
@@ -231,7 +236,8 @@ def _finish(
 
     _log(
         f"done path={meta.get('path')} status={getattr(goal, 'status', '?')} "
-        f"acted={acted} ({meta['elapsed_ms']}ms) say={say!r}"[:220]
+        f"acted={acted} recovered={meta.get('recovered')} "
+        f"({meta['elapsed_ms']}ms) say={say!r}"[:240]
     )
     try:
         import memory

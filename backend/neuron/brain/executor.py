@@ -68,6 +68,19 @@ def execute_plan(plan: dict | list | None, *, confirmed: bool = False, timeout: 
         step = {"action": name, "args": args}
         if not name:
             continue
+        try:
+            from neuron.speech import interrupt as interrupt_mod
+            if interrupt_mod.interrupted():
+                msg = "Interrupted."
+                result.errors.append(msg)
+                result.failed_step = step
+                result.steps_run.append({
+                    "action": name, "args": args, "ok": False, "out": msg, "interrupted": True,
+                })
+                print(f"[executor] interrupted before {name}", flush=True)
+                break
+        except Exception:
+            pass
         spec = tool_registry.get(name)
         if not spec:
             result.unknown.append(name)
@@ -76,13 +89,25 @@ def execute_plan(plan: dict | list | None, *, confirmed: bool = False, timeout: 
 
         allowed, reason = policy.allow(name, args, confirmed=confirmed or bool(args.get("confirmed")))
         if not allowed:
+            tier = "blocked"
+            try:
+                tier = policy.classify(name, args).tier
+            except Exception:
+                pass
+            if tier == "blocked" or (
+                not policy.requires_confirm(name, args) and "blocked" in (reason or "").lower()
+            ):
+                result.errors.append(reason or f"Blocked: {name}")
+                result.failed_step = step
+                print(f"[executor] BLOCKED {name}: {reason}", flush=True)
+                break
             if policy.requires_confirm(name, args) or "confirm" in (reason or "").lower():
                 from neuron.safety import confirm as confirm_mod
-                confirm_mod.request_confirm(name, args, reason)
-                result.needs_confirm = {"action": name, "args": args, "reason": reason}
+                payload = confirm_mod.request_confirm(name, args, reason)
+                result.needs_confirm = payload
                 result.errors.append(reason or f"Confirmation required for {name}")
                 result.failed_step = step
-                print(f"[executor] confirm required: {name}", flush=True)
+                print(f"[executor] confirm required ({tier}): {name}", flush=True)
                 break
             result.errors.append(reason or f"Blocked: {name}")
             result.failed_step = step

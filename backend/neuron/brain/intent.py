@@ -28,12 +28,34 @@ def understand(raw: str) -> Intent:
         return intent
 
     import re
-    if re.search(
-        r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b",
-        text,
-    ):
-        intent.kind = "stop"
-        return intent
+    try:
+        from neuron.speech.interrupt import is_stop_phrase
+        if is_stop_phrase(text):
+            intent.kind = "stop"
+            return intent
+    except Exception:
+        if re.search(
+            r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron|"
+            r"(?:hey\s+)?neuron[,.]?\s+stop)\b|^(?:please\s+)?stop[.!]?$",
+            text,
+            re.I,
+        ):
+            intent.kind = "stop"
+            return intent
+
+    # Learned procedure match → run_procedure (not while teaching / learning)
+    try:
+        from neuron.learning import procedures as proc_mod
+        if not re.search(r"\b(learn|teach|record|watch me)\b", text, re.I):
+            hit = proc_mod.match(text)
+            if hit:
+                intent.kind = "recipe"
+                intent.action = "run_procedure"
+                intent.args = {"id": hit.get("id") or ""}
+                intent.confidence = 0.92
+                return intent
+    except Exception:
+        pass
 
     # Voice recipe match → deterministic tool
     try:

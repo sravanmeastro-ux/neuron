@@ -13,12 +13,24 @@ from neuron.brain.normalize import normalize_plan
 PLANNER_SYSTEM = """You are NEURON's planner on a Windows PC.
 You NEVER execute actions yourself. You only return STRICT JSON plans.
 
-Output format ONLY:
-{{"say":"<short spoken reply>","steps":[{{"tool":"<name>","arguments":{{...}}}}]}}
+NEURON runs a closed loop: observe → act ONE step → verify → retry/replan.
+Every step should be verifiable on the live computer.
+
+Preferred output format:
+{{"say":"<short spoken reply>","steps":[{{"tool":"<name>","arguments":{{...}},"target":"<what>","expected_result":"<how we know it worked>"}}]}}
+
+Minimal still accepted:
+{{"say":"...","steps":[{{"tool":"<name>","arguments":{{...}}}}]}}
 
 Rules:
 - Use ONLY tools from the TOOLS list.
 - Prefer 1-4 steps. Smallest correct plan.
+- Include target (app/site/UI label) and expected_result when possible.
+  Examples of expected_result:
+  - open_app Blender → "app 'Blender' is running or has a visible window"
+  - browser_search youtube → "search results visible on youtube"
+  - close_app → "app window is gone"
+- Optional per-step: "timeout" (seconds), "retry_limit" (int).
 - open desktop apps with open_app {{"name":"Blender"}} (also accept "application").
 - Websites: browser_open / browser_navigate / browser_search — NEVER open_app for youtube/google/gmail.
 - Generic web tasks (preferred):
@@ -26,16 +38,17 @@ Rules:
   OR browser_click {{"index":0}} / first result from search state.
   For research questions: browser_research {{"query":"...","site":"google"}} (summarizes; sources in tool state).
 - Existing YouTube helpers (play_result, youtube_home, …) remain valid shortcuts when already on YouTube.
-- UI understanding (desktop): click_ui_element / get_ui_tree for native apps.
+- UI understanding (desktop): click_element / click_ui_element (Element Resolver: DOM→UIA→OCR→Vision).
 - Prefer DOM/a11y browser_* and UIA tools over click / move_mouse / computer_use.
 - Screen understanding: analyze_screen / get_screen_context (UIA→OCR→local Ollama VLM). Never cloud vision.
-- Coordinate mouse / vision computer_use only as last resort.
+- Coordinate mouse / vision computer_use only as last resort (Resolver already falls back to them).
 - CONTEXT_SNAPSHOT / RESOLVED_REFERENCES (Phase 8): when present, treat them as ground truth for deixis
   (it/that/this/first one/the X one/this page/that window). Prefer tool_hint + args_hint from RESOLVED_REFERENCES.
   Examples: YouTube + "play the first one" → browser_click index 0; Explorer + "open the Blender one" → click_ui_element name;
   Spotify + "pause it" → hotkey space (current playback).
 - Do NOT invent which item "first/that" means — use snapshot UI/DOM labels. If unresolved, empty steps and ask in say.
 - Never guess destructive actions (delete/uninstall/shutdown/close all) from vague deixis — ask in say, empty steps.
+- Respect SAFETY TIERS: safe runs now; confirm/high wait for user 'confirm'; blocked never runs.
 - Multi-monitor (Phase 10): get_monitors first when the user names a screen.
   Phrases: "screen 1", "screen 2", "left/right monitor", "main screen", "other screen".
   "Open YouTube on screen 1" → browser_open/search then move_window_to_monitor {{"name":"Chrome","monitor":"1"}} (or browser window title); verify after.
@@ -58,7 +71,7 @@ def plan(request: str, context: str = "", normalized: str = "") -> dict | None:
         return None
 
     tool_registry.ensure_bootstrapped()
-    tools = tool_registry.tools_doc(70)
+    tools = tool_registry.tools_doc(110)
     user = request
     if normalized and normalized.strip().lower() != (request or "").strip().lower():
         user = f"User said: {request}\nNormalized intent: {normalized}"

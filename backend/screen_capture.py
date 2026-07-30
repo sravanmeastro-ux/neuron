@@ -333,16 +333,30 @@ def capture_foreground(padding: int = 0) -> dict | None:
 
 
 def structural_overview() -> str:
-    """Instant text map of monitors + open windows (no VLM)."""
-    mons = list_monitors()
-    wins = list_visible_windows()
-    lines = [f"Displays: {len(mons)}"]
-    for m in mons:
-        lines.append(f"- {m.label()}")
-        on_mon = [w for w in wins if w["monitor_id"] == m.id]
-        if not on_mon:
-            lines.append("  (no large windows)")
-            continue
-        for w in on_mon[:12]:
-            lines.append(f'  • "{w["title"]}"')
-    return "\n".join(lines)
+    """Instant multi-monitor world model (no VLM).
+
+    Format:
+      Monitor 1
+      Chrome
+      YouTube
+      ...
+      Active application: Chrome
+      Focused monitor: 1
+      Cursor position: x,y
+    """
+    try:
+        from neuron.brain.world_model import world_model_text
+        return world_model_text(deep=False, use_ocr=False)
+    except Exception:
+        mons = list_monitors()
+        wins = list_visible_windows()
+        lines = [f"Displays: {len(mons)}"]
+        for m in mons:
+            lines.append(f"- {m.label()}")
+            on_mon = [w for w in wins if w["monitor_id"] == m.id]
+            if not on_mon:
+                lines.append("  (no large windows)")
+                continue
+            for w in on_mon[:12]:
+                lines.append(f'  • "{w["title"]}"')
+        return "\n".join(lines)

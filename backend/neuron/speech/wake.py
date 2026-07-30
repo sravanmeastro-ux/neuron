@@ -106,10 +106,17 @@ def process_utterance(text: str, *, wake_required: bool, conversation_armed: boo
     if not raw:
         return {"allow": False, "text": "", "wake_only": False, "armed_by_wake": False}
 
-    # Safety / mode phrases always allowed
+    # Safety / mode phrases always allowed (including V2 interrupt)
+    try:
+        from neuron.speech.interrupt import is_stop_phrase
+        if is_stop_phrase(raw):
+            return {"allow": True, "text": raw, "wake_only": False, "armed_by_wake": False}
+    except Exception:
+        pass
     if re.search(
         r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron|"
-        r"hands free|wake word|conversation mode)\b",
+        r"hands free|wake word|conversation mode|"
+        r"(?:hey\s+)?neuron[,.]?\s+stop)\b",
         raw,
         re.I,
     ):

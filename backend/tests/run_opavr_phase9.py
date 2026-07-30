@@ -154,6 +154,9 @@ def test_opavr_success_path():
     ), mock.patch(
         "neuron.brain.loop.verifier.observe_world",
         return_value={"app": "Blender", "window": "Blender"},
+    ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
     ):
         say, acted, meta, goal = opavr.run_opavr(
             request="Open Blender",
@@ -164,6 +167,10 @@ def test_opavr_success_path():
     assert goal.status == "success"
     assert len(goal.completed_steps) == 1
     assert "Blender" in (say or "")
+    # Closed-loop enrichment
+    step0 = goal.completed_steps[0]
+    assert step0.get("expected_result")
+    assert step0.get("target") == "Blender" or (step0.get("args") or {}).get("name") == "Blender"
     print("OK opavr success", say)
 
 
@@ -207,6 +214,12 @@ def test_opavr_verify_fail_then_recover():
     ), mock.patch(
         "neuron.brain.loop.verifier.observe_world", return_value={}
     ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
+    ), mock.patch(
+        "neuron.brain.loop.verifier.diagnose_failure",
+        return_value={"cause": "app_not_present", "detail": "not running"},
+    ), mock.patch(
         "neuron.brain.recover.llm_replan_pending", return_value=None
     ):
         say, acted, meta, goal = opavr.run_opavr(
@@ -240,7 +253,6 @@ def test_opavr_multi_step_no_full_restart():
         executed.append(step.get("action"))
         er = ExecutionResult()
         # First click attempt fails; recovery click succeeds
-        ok = not (step.get("action") == "browser_click" and executed.count("browser_click") == 1)
         if step.get("action") == "browser_click" and executed.count("browser_click") == 1:
             er.errors = ["click missed"]
             er.failed_step = step
@@ -280,6 +292,12 @@ def test_opavr_multi_step_no_full_restart():
     ), mock.patch(
         "neuron.brain.loop.verifier.observe_world", return_value={"url": "https://youtube.com"}
     ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
+    ), mock.patch(
+        "neuron.brain.loop.verifier.diagnose_failure",
+        return_value={"cause": "target_not_found", "detail": "click missed"},
+    ), mock.patch(
         "neuron.brain.recover.deterministic_recovery", return_value=None
     ), mock.patch(
         "neuron.brain.recover.llm_replan_pending", side_effect=fake_llm_replan
@@ -300,10 +318,80 @@ def test_opavr_multi_step_no_full_restart():
     print("OK multi-step replan from state", executed)
 
 
+def test_step_enrichment():
+    from neuron.brain.normalize import normalize_plan
+    from neuron.brain.step import Step, infer_expected_result
+
+    plan = normalize_plan({
+        "say": "Opening.",
+        "steps": [{"tool": "open_app", "arguments": {"application": "Blender"}}],
+    })
+    step = plan["steps"][0]
+    assert step["action"] == "open_app"
+    assert step["args"]["name"] == "Blender"
+    assert step["target"] == "Blender"
+    assert "Blender" in step["expected_result"]
+    assert step["timeout"] > 0
+    assert step["retry_limit"] >= 0
+
+    s = Step.from_dict({
+        "action": "browser_open",
+        "args": {"site": "youtube.com"},
+        "expected_result": "browser URL reflects youtube",
+        "timeout": 30,
+        "retry_limit": 1,
+    })
+    assert s is not None
+    assert s.target == "youtube.com"
+    assert s.timeout == 30.0
+    assert "running" in infer_expected_result("open_app", {"name": "X"}, "X")
+    print("OK step enrichment", step)
+
+
+def test_agent_loop_facade():
+    from neuron.brain.agent_loop import AgentLoop
+    from neuron.brain.executor import ExecutionResult
+    from neuron.brain.goal import GoalState
+    from neuron.brain.verifier import VerifyResult
+
+    plan = {
+        "say": "Opening.",
+        "steps": [{"action": "open_app", "args": {"name": "Notepad"}}],
+    }
+
+    def fake_exec(p, confirmed=False, timeout=None):
+        er = ExecutionResult()
+        er.outcomes = ["Opened Notepad."]
+        er.steps_run = [{
+            "action": "open_app",
+            "args": {"name": "Notepad"},
+            "ok": True,
+            "out": "Opened Notepad.",
+            "ms": 5,
+        }]
+        return er
+
+    with mock.patch("neuron.brain.loop.executor.execute_plan", side_effect=fake_exec), mock.patch(
+        "neuron.brain.loop.verifier.verify_execution_step",
+        return_value=VerifyResult(True, "verified"),
+    ), mock.patch(
+        "neuron.brain.loop.verifier.observe_world",
+        return_value={"app": "Notepad"},
+    ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
+    ):
+        loop = AgentLoop()
+        say, acted, meta, goal = loop.run("open notepad", plan=plan)
+    assert acted and goal.status == "success"
+    assert isinstance(goal, GoalState)
+    assert meta.get("trace")
+    print("OK AgentLoop facade", say)
+
+
 def test_agent_wires_trace():
     from neuron.brain import agent
     from neuron.brain.goal import GoalState
-    from neuron.brain.trace import Trace
 
     g = GoalState(goal="open notepad", status="success")
     g.completed_steps = [{"action": "open_app"}]
@@ -313,14 +401,75 @@ def test_agent_wires_trace():
         "recovered": False,
         "steps": [{"action": "open_app", "ok": True}],
         "needs_confirm": None,
+        "diagnoses": [],
     }
-    with mock.patch("neuron.brain.agent.opavr.run_opavr", return_value=("Opened Notepad.", True, fake_meta, g)):
+    with mock.patch(
+        "neuron.brain.agent.AgentLoop.run",
+        return_value=("Opened Notepad.", True, fake_meta, g),
+    ):
         say, acted, meta = agent.run("open notepad", use_rules_fallback=False)
     assert acted
     assert say
+    assert meta.get("agent_loop") is True
     assert "trace" in meta
     assert meta.get("goal", {}).get("status") == "success"
-    print("OK agent trace meta", meta.get("path"), len(meta.get("trace") or []))
+    print("OK agent AgentLoop meta", meta.get("path"), meta.get("agent_loop"))
+
+
+def test_screen_verify_helpers():
+    from neuron.brain import verifier
+
+    assert verifier.needs_screen_verify({
+        "action": "click_ui_element",
+        "args": {"name": "Save"},
+    })
+    assert verifier.needs_screen_verify({
+        "action": "open_app",
+        "args": {"name": "Blender"},
+        "expected_result": "button 'Render' is visible on screen",
+    })
+    assert not verifier.needs_screen_verify({
+        "action": "open_app",
+        "args": {"name": "Blender"},
+        "expected_result": "app 'Blender' is running or has a visible window",
+    })
+    assert verifier.needs_ocr_verify({
+        "action": "type_text",
+        "args": {"text": "hello"},
+    })
+
+    # Text match against screen blob without calling real OCR
+    vr = verifier._match_expected_result(
+        "button 'Save' is visible on screen",
+        {"screen_blob": "File | Edit | Save | Cancel", "screen_sources": ["uia"]},
+        "clicked",
+    )
+    assert vr.ok
+    vr2 = verifier._match_expected_result(
+        "button 'Export' is visible on screen",
+        {"screen_blob": "File | Edit | Save | Cancel", "screen_sources": ["uia"]},
+        "clicked",
+    )
+    assert not vr2.ok
+
+    # UI find verify uses screen_blob
+    ok, note = verifier.verify_step(
+        {"action": "find_ui_element", "args": {"name": "Save"}},
+        "found Save",
+        None,
+        strict=True,
+        world={"screen_blob": "File | Save | Help"},
+    )
+    assert ok
+    ok2, note2 = verifier.verify_step(
+        {"action": "find_ui_element", "args": {"name": "Export"}},
+        "found Export",
+        None,
+        strict=True,
+        world={"screen_blob": "File | Save | Help"},
+    )
+    assert not ok2
+    print("OK screen verify helpers", note, note2)
 
 
 if __name__ == "__main__":
@@ -329,8 +478,11 @@ if __name__ == "__main__":
     test_verify_open_app_hard()
     test_deterministic_recover_open_app()
     test_trace_phases()
+    test_step_enrichment()
+    test_screen_verify_helpers()
     test_opavr_success_path()
     test_opavr_verify_fail_then_recover()
     test_opavr_multi_step_no_full_restart()
+    test_agent_loop_facade()
     test_agent_wires_trace()
     print("\nPhase 9 OPAVR tests passed.")

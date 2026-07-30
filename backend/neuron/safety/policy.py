@@ -1,23 +1,17 @@
-"""Risk policy — block / confirm dangerous tools."""
+"""Risk policy — Phase 8 Safe / Confirmation / High / Blocked tiers."""
 
 from __future__ import annotations
 
-import re
-
-from neuron.catalog import DEFAULT_RISK
-from neuron.brain import tool_registry
-
-# Shell deny patterns
-_DENY_SHELL = re.compile(
-    r"(?i)(\bformat\s+[a-z]:|\brm\s+-rf\b|\bdel\s+/[sf]\b|\bRemove-Item\b.*(-Recurse|-Force)|"
-    r"\bshutdown\b|\bRestart-Computer\b|\bStop-Computer\b|\bInvoke-Expression\s*\(|"
-    r"\biex\s*\(|DownloadString|BitLocker|\bnet\s+user\s+\w+\s+/add\b)"
-)
-
-_ALLOW_PS = re.compile(
-    r"^(Get-|Select-|Write-Output|echo |dir |ls |pwd|whoami|Get-Process|"
-    r"Get-Service|Get-ChildItem|Test-Path|Resolve-Path)",
-    re.I,
+from neuron.safety import levels
+from neuron.safety.levels import (
+    BLOCKED,
+    CONFIRM,
+    HIGH,
+    SAFE,
+    Classification,
+    classify,
+    normalize_tier,
+    tier_prompt,
 )
 
 _pending_confirm: dict | None = None
@@ -40,37 +34,69 @@ def clear_pending() -> dict | None:
 
 
 def risk_of(name: str) -> str:
-    spec = tool_registry.get(name)
-    if spec:
-        return spec.risk
-    return DEFAULT_RISK.get(name, "medium")
+    """Effective tier for a tool name (no args). Prefer classify() when args exist."""
+    return classify(name, {}).tier
 
 
 def requires_confirm(name: str, args: dict | None = None) -> bool:
-    if risk_of(name) in ("confirm", "high") and name in ("run_shell", "run_powershell"):
-        cmd = str((args or {}).get("command") or "")
-        # Read-only PowerShell can skip confirm
-        if name == "run_powershell" and _ALLOW_PS.search(cmd.strip()):
-            return False
-        return True
-    return risk_of(name) == "confirm"
+    c = classify(name, args)
+    return c.tier in (CONFIRM, HIGH)
+
+
+def is_blocked(name: str, args: dict | None = None) -> bool:
+    return classify(name, args).tier == BLOCKED
 
 
 def allow(name: str, args: dict | None = None, *, confirmed: bool = False) -> tuple[bool, str]:
+    """Return (allowed, reason). Blocked never allowed; confirm/high need confirmed=True."""
     args = args or {}
-    if name in ("run_shell", "run_powershell"):
-        cmd = str(args.get("command") or "")
-        if _DENY_SHELL.search(cmd):
-            return False, f"Blocked dangerous command: {cmd[:80]}"
-        if name == "run_powershell" and not _ALLOW_PS.search(cmd.strip()) and not confirmed:
-            return False, "PowerShell needs confirmation (not on allowlist)"
-        if name == "run_shell" and not confirmed:
-            return False, "Shell commands require confirmation — say 'confirm' after asking"
-        if name == "run_shell" and confirmed:
+    c = classify(name, args)
+
+    if c.tier == BLOCKED:
+        return False, c.reason or f"Blocked: {name}"
+
+    if c.tier == SAFE:
+        return True, ""
+
+    if c.tier in (CONFIRM, HIGH):
+        if confirmed or bool(args.get("confirmed")):
+            # Still refuse blocked-shaped payloads even if somehow labeled confirm
+            if levels._BLOCKED_CONTENT.search(levels._blob(args)):
+                return False, "Blocked high-consequence content (cannot override with confirm)."
             return True, ""
-        if name == "run_powershell" and (_ALLOW_PS.search(cmd.strip()) or confirmed):
-            return True, ""
-        return False, "Shell blocked"
-    if requires_confirm(name, args) and not confirmed:
-        return False, f"{name} requires confirmation"
+        label = "High-consequence" if c.tier == HIGH else "Confirmation required"
+        detail = c.reason or f"{name} needs your OK"
+        return False, f"{label}: {detail}. Say 'confirm' or 'go ahead' to proceed, or 'cancel'."
+
     return True, ""
+
+
+def explain(name: str, args: dict | None = None) -> dict:
+    c = classify(name, args)
+    ok, reason = allow(name, args, confirmed=False)
+    return {
+        **c.to_dict(),
+        "allowed_without_confirm": ok,
+        "message": reason or "OK to run",
+    }
+
+
+# Re-exports for callers / tests
+__all__ = [
+    "SAFE",
+    "CONFIRM",
+    "HIGH",
+    "BLOCKED",
+    "Classification",
+    "classify",
+    "normalize_tier",
+    "tier_prompt",
+    "risk_of",
+    "requires_confirm",
+    "is_blocked",
+    "allow",
+    "explain",
+    "set_pending",
+    "get_pending",
+    "clear_pending",
+]

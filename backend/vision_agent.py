@@ -310,15 +310,25 @@ def vlm_glance(request: str = "", force: bool = False) -> str:
 def quick_screen_context(request: str = "", *, force_vlm: bool = False) -> str:
     """Fast screen context. Structural (instant) by default.
 
-    VLM only when explicitly needed — keeps voice commands snappy.
+    Prefers unified ComputerState (monitors/app/focus/cursor) then optional VLM.
+    Does not replace computer_use / answer_screen paths.
     """
     if not needs_glance(request) and not force_vlm:
         return ""
-    parts = [structural_glance()]
+    parts: list[str] = []
+    # Unified desktop awareness (reuses world_model + windows; no VLM)
+    try:
+        from neuron.brain.computer_state import capture as capture_state
+        cs = capture_state(deep=False, remember=False, request=request or "")
+        blob = cs.compact(1200)
+        if blob:
+            parts.append(blob)
+    except Exception:
+        parts.append(structural_glance())
     try:
         import monitor_focus
         focus = monitor_focus.status_line()
-        if focus:
+        if focus and focus not in "\n".join(parts):
             parts.insert(0, focus)
     except Exception:
         pass

@@ -18,7 +18,20 @@ def find_ui_element(args: dict):
 
 
 def click_ui_element(args: dict):
+    """Semantic click via Element Resolver (DOM → UIA → OCR → Vision)."""
     return uia_actions.click_ui_element(args or {})
+
+
+def click_element(args: dict):
+    """Alias: Agent click("Search") → Element Resolver cascade."""
+    from neuron.brain.element_resolver import click as resolver_click
+    return resolver_click(args or {})
+
+
+def find_element(args: dict):
+    """Resolve a semantic label without clicking (reports source + coords)."""
+    from neuron.brain.element_resolver import find as resolver_find
+    return resolver_find(args or {})
 
 
 def get_element_text(args: dict):

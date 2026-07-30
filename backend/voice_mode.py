@@ -46,12 +46,14 @@ def set_wake_word_required(required: bool) -> str:
     try:
         import memory
         memory.remember(
-            "wake word",
+            "voice.wake_word",
             "required" if required else "not required — hands-free; just give commands",
+            force=True,
         )
         memory.remember(
-            "pc access",
+            "voice.pc_access",
             "full desktop control granted; act on plain speech without waiting to be named",
+            force=True,
         )
     except Exception:
         pass
@@ -91,11 +93,18 @@ def allow_transcript(text: str) -> bool:
         return False
     if re.search(
         r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron|"
-        r"hands free|wake word|conversation mode|end conversation)\b",
+        r"hands free|wake word|conversation mode|end conversation|"
+        r"(?:hey\s+)?neuron[,.]?\s+stop)\b|^(?:please\s+)?stop[.!]?$",
         t,
         re.I,
     ):
         return True
+    try:
+        from neuron.speech.interrupt import is_stop_phrase
+        if is_stop_phrase(t):
+            return True
+    except Exception:
+        pass
 
     try:
         from neuron.speech.session import get_session
@@ -121,16 +130,19 @@ def bootstrap_hands_free() -> None:
         import memory
         if not wake_word_required():
             memory.remember(
-                "wake word",
+                "voice.wake_word",
                 "not required — hands-free; just give commands",
+                force=True,
             )
             memory.remember(
-                "pc access",
+                "voice.pc_access",
                 "full desktop control granted; act on plain speech without waiting to be named",
+                force=True,
             )
             memory.remember(
-                "how to address me",
+                "voice.address",
                 "optional — user may say Neuron but does not need to",
+                force=True,
             )
     except Exception:
         pass

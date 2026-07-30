@@ -52,6 +52,36 @@ def gather(request: str = "", *, snapshot: ContextSnapshot | None = None) -> str
     except Exception:
         snap = None
 
+    # Multi-monitor world model / ComputerState (AgentLoop observation format)
+    try:
+        from neuron.brain.computer_state import capture as capture_state
+        want_deep = bool(request and any(
+            w in request.lower()
+            for w in (
+                "screen", "monitor", "that", "this", "first", "video",
+                "discord", "youtube", "click", "there", "button", "ui",
+            )
+        ))
+        cs = capture_state(deep=want_deep, use_ocr=False, remember=False, request=request or "")
+        wm = cs.compact(1400)
+        if wm:
+            chunks.append("COMPUTER_STATE:\n" + wm.strip())
+    except Exception:
+        try:
+            from neuron.brain.world_model import world_model_text
+            want_deep = bool(request and any(
+                w in request.lower()
+                for w in (
+                    "screen", "monitor", "that", "this", "first", "video",
+                    "discord", "youtube", "click", "there",
+                )
+            ))
+            wm = world_model_text(deep=want_deep, use_ocr=False)
+            if wm:
+                chunks.append("WORLD_MODEL:\n" + wm.strip())
+        except Exception:
+            pass
+
     # Phase 5 ScreenContext (heavy OCR/VLM only for screen-related asks)
     try:
         from neuron.perception.pipeline import build_screen_context

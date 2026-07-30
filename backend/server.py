@@ -23,14 +23,18 @@ ROOT = Path(__file__).resolve().parent.parent
 
 app = FastAPI(title="N.E.U.R.O.N")
 
-_STOP_RE = re.compile(
-    r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b",
-    re.I,
-)
-
 
 def _is_stop_talk(text: str) -> bool:
-    return bool(_STOP_RE.search(text or ""))
+    try:
+        from neuron.speech.interrupt import is_stop_phrase
+        return is_stop_phrase(text)
+    except Exception:
+        return bool(re.search(
+            r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron|"
+            r"(?:hey\s+)?neuron[,.]?\s+stop|^stop[.!]?$)\b",
+            text or "",
+            re.I,
+        ))
 
 
 @app.on_event("startup")
@@ -79,6 +83,12 @@ async def _startup():
         print(f"[server] voice_mode bootstrap failed: {exc}", flush=True)
 
     try:
+        from neuron.safety.failsafe import ensure_failsafe
+        print(f"[server] {ensure_failsafe()}", flush=True)
+    except Exception as exc:
+        print(f"[server] failsafe init failed: {exc}", flush=True)
+
+    try:
         from neuron.memory import store as sql
         sql.init_db()
         print("[server] SQLite memory ready", flush=True)
@@ -97,27 +107,33 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
     now = asyncio.get_event_loop().time()
     norm = " ".join(text.lower().split())
 
-    # Stop talking always wins — even mid-task / mid-speech.
+    # Stop / interrupt always wins — even mid-task / mid-speech.
     if _is_stop_talk(text):
         busy_state["busy"] = False
         try:
-            from neuron.speech.tts import stop_speaking
-            stop_speaking()
+            from neuron.speech.interrupt import request as request_interrupt
+            request_interrupt(reason=f"phrase:{text!r}")
         except Exception:
-            pass
+            try:
+                from neuron.speech.tts import stop_speaking
+                stop_speaking()
+            except Exception:
+                pass
         await websocket.send_text(json.dumps({
             "type": "stop_speech",
             "heard": text,
             "text": "Okay.",
             "acted": True,
+            "interrupted": True,
         }))
         return
 
     if busy_state["busy"]:
+        # Non-stop speech while working — do not queue; wait for interrupt phrase.
         await websocket.send_text(json.dumps({
             "type": "response",
             "heard": text,
-            "text": "One moment — still finishing the last request.",
+            "text": "Still working — say 'Neuron, stop' to interrupt.",
             "acted": False,
         }))
         return
@@ -150,24 +166,47 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
     busy_state["busy"] = True
     busy_state["barge_sent"] = False
     try:
+        from neuron.speech.interrupt import clear as clear_interrupt
+        clear_interrupt()
+    except Exception:
+        pass
+    try:
         reply, acted = await asyncio.to_thread(brain.handle_command, text)
+        # If interrupted mid-run, prefer a short ack over a stale success line.
+        try:
+            from neuron.speech.interrupt import interrupted
+            if interrupted():
+                reply = "Stopped."
+                acted = True
+        except Exception:
+            pass
     except Exception as exc:
         reply, acted = f"That failed: {exc}", False
     finally:
         busy_state["busy"] = False
         busy_state["barge_sent"] = False
+        try:
+            from neuron.speech.interrupt import clear as clear_interrupt
+            clear_interrupt()
+        except Exception:
+            pass
 
     if reply == "__STOP_SPEECH__":
         try:
-            from neuron.speech.tts import stop_speaking
-            stop_speaking()
+            from neuron.speech.interrupt import request as request_interrupt
+            request_interrupt(reason="brain_stop")
         except Exception:
-            pass
+            try:
+                from neuron.speech.tts import stop_speaking
+                stop_speaking()
+            except Exception:
+                pass
         await websocket.send_text(json.dumps({
             "type": "stop_speech",
             "heard": text,
             "text": "Okay.",
             "acted": True,
+            "interrupted": True,
         }))
         return
 
@@ -306,25 +345,30 @@ async def ws_endpoint(websocket: WebSocket):
                     events = await asyncio.to_thread(voice_pipe.push_pcm, pcm)
                     for ev in events:
                         if ev.kind == "level" and ev.level > 0.08:
-                            # Barge-in: new speech while busy → interrupt TTS (once)
+                            # Barge-in: new speech while busy → interrupt TTS + task (once)
                             if busy_state["busy"] and ev.level > 0.25 and not busy_state.get("barge_sent"):
                                 busy_state["barge_sent"] = True
                                 try:
-                                    from neuron.speech.session import get_session
-                                    get_session().request_interrupt()
+                                    from neuron.speech.interrupt import request as request_interrupt
+                                    request_interrupt(reason="barge_in_energy")
                                 except Exception:
-                                    pass
-                                try:
-                                    from neuron.speech.tts import stop_speaking
-                                    stop_speaking()
-                                except Exception:
-                                    pass
+                                    try:
+                                        from neuron.speech.session import get_session
+                                        get_session().request_interrupt()
+                                    except Exception:
+                                        pass
+                                    try:
+                                        from neuron.speech.tts import stop_speaking
+                                        stop_speaking()
+                                    except Exception:
+                                        pass
                                 await websocket.send_text(json.dumps({
                                     "type": "stop_speech",
                                     "heard": "",
                                     "text": None,
                                     "acted": True,
                                     "barge_in": True,
+                                    "interrupted": True,
                                 }))
                             await websocket.send_text(json.dumps({
                                 "type": "hearing",

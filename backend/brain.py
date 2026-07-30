@@ -191,15 +191,20 @@ def handle_command(raw: str):
 
     agent_attempted = False
 
-    # ---- confirm pending high-risk tool ------------------------------
+    # ---- confirm pending high-risk / confirm-tier tool ---------------
     if re.fullmatch(r"(?:please )?(?:confirm|yes|do it|proceed|go ahead)(?: please)?", text):
         try:
             from neuron.safety import confirm as confirm_mod
             from neuron.brain import executor
             pending = confirm_mod.take_pending()
             if pending:
-                plan = {"say": "", "steps": [{"action": pending["action"], "args": dict(pending.get("args") or {})}]}
-                # Mark confirmed for policy
+                plan = {
+                    "say": "",
+                    "steps": [{
+                        "action": pending["action"],
+                        "args": dict(pending.get("args") or {}),
+                    }],
+                }
                 plan["steps"][0]["args"]["confirmed"] = True
                 er = executor.execute_plan(plan, confirmed=True)
                 if er.errors:
@@ -213,6 +218,13 @@ def handle_command(raw: str):
             from neuron.safety import confirm as confirm_mod
             if confirm_mod.take_pending():
                 return "Cancelled.", True
+        except Exception:
+            pass
+    # Safety status
+    if re.search(r"\b(safety|permission) (status|tiers|levels)\b|\bwhat (can|will) you (do|run)\b", text):
+        try:
+            from neuron.safety.levels import tier_prompt
+            return tier_prompt(), True
         except Exception:
             pass
 
@@ -255,12 +267,19 @@ def handle_command(raw: str):
         import voice_mode
         return voice_mode.set_conversation_mode(False), True
 
-    # ---- stop talking (TTS barge-in) ---------------------------------
-    if re.search(
-        r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b",
-        text,
-    ):
-        return "__STOP_SPEECH__", True
+    # ---- stop / interrupt (TTS + AgentLoop barge-in) -----------------
+    try:
+        from neuron.speech.interrupt import is_stop_phrase
+        if is_stop_phrase(text):
+            return "__STOP_SPEECH__", True
+    except Exception:
+        if re.search(
+            r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron|"
+            r"(?:hey\s+)?neuron[,.]?\s+stop)\b|^(?:please\s+)?stop[.!]?$",
+            text,
+            re.I,
+        ):
+            return "__STOP_SPEECH__", True
 
     # ---- monitor focus: look at / use screen|monitor N / left|right|main ----
     m_focus = re.search(
@@ -311,7 +330,50 @@ def handle_command(raw: str):
     # VLM when the user refers to on-screen stuff).
     _refresh_screen_glance(text)
 
-    # ---- Phase 1 agent-first brain -----------------------------------
+    # ---- Phase 9: learn PROCEDURE by demonstration (before AgentLoop) --
+    # Must win over recipe match for "learn how I create a Blender project".
+    try:
+        from neuron.learning import teach as teach_mod
+        from neuron.learning import procedures as proc_mod
+
+        goal = teach_mod.parse_learn_goal(text)
+        if goal is not None:
+            return teach_mod.start(goal), True
+
+        if teach_mod.is_teaching() and re.search(
+            r"\b(done|finished|that'?s it|stop learning|save (?:the )?(?:procedure|skill|workflow)|"
+            r"end (?:the )?lesson|i'?m done)\b",
+            text,
+        ):
+            m_as = re.search(r"\b(?:as|named|called)\s+(.+)$", text)
+            return teach_mod.finish(m_as.group(1).strip() if m_as else ""), True
+
+        if teach_mod.is_teaching() and re.fullmatch(
+            r"(?:please )?(?:cancel|abort)(?: teaching| learning| this)?",
+            text,
+        ):
+            return teach_mod.cancel(), True
+
+        if re.search(
+            r"\b(list|show) (?:my )?(?:learned )?(?:procedures?|skills?|workflows?)\b"
+            r"|\bwhat (?:procedures?|skills?) (?:do you|have you) (?:know|learned)\b",
+            text,
+        ):
+            return proc_mod.list_summary(), True
+
+        if re.search(r"\b(teaching status|am i teaching|learning status)\b", text):
+            return teach_mod.status(), True
+
+        m_forget = re.match(
+            r"(?:forget|delete|unlearn)\s+(?:the\s+)?(?:skill|procedure|workflow)\s+(.+)$",
+            text,
+        )
+        if m_forget:
+            return proc_mod.delete_procedure(m_forget.group(1).strip()), True
+    except Exception as exc:
+        print(f"[learn] early procedure path skipped: {exc}", flush=True)
+
+    # ---- AgentLoop closed-loop brain (OPAVR) -------------------------
     _acfg = _agent_config()
     if _acfg.get("enabled", True) and _acfg.get("agent_first", True):
         try:
@@ -325,9 +387,19 @@ def handle_command(raw: str):
             if meta.get("path") == "rules_fallback" or (say is None and not acted):
                 print("[agent] planner unavailable -> legacy rules", flush=True)
             else:
+                goal = meta.get("goal") or {}
+                print(
+                    f"[agent] AgentLoop path={meta.get('path')} "
+                    f"status={goal.get('status')} "
+                    f"steps={len(meta.get('steps') or [])} "
+                    f"recovered={meta.get('recovered')} "
+                    f"replanned={meta.get('replanned')} "
+                    f"ms={meta.get('elapsed_ms')}",
+                    flush=True,
+                )
                 return (say or None), acted
         except Exception as exc:
-            print(f"[agent] agent-first error -> legacy: {exc}", flush=True)
+            print(f"[agent] AgentLoop error -> legacy: {exc}", flush=True)
 
     # ---- multi-screen / any-app vision Q&A ---------------------------
     # YouTube tile count uses DOM (precise). Everything else uses active-app vision.
@@ -487,6 +559,19 @@ def handle_command(raw: str):
         if re.search(r"\bwindows update\b", text):
             page = "update"
         return actions.open_settings(page), True
+
+    # ---- Phase 9: reuse learned procedure by phrase (fallback path) ---
+    try:
+        from neuron.learning import procedures as proc_mod
+        from neuron.learning import teach as teach_mod
+        if not teach_mod.is_teaching() and not re.search(
+            r"\b(learn|teach|record|watch me)\b", text
+        ):
+            hit = proc_mod.match(text)
+            if hit:
+                return proc_mod.run_procedure(proc_id=hit.get("id") or "", query=text), True
+    except Exception as exc:
+        print(f"[learn] procedure reuse skipped: {exc}", flush=True)
 
     # ---- click workflow recorder (optional; NEVER always-on) ---------
     import click_recorder
@@ -1234,19 +1319,73 @@ def handle_command(raw: str):
     if re.search(r"system (report|status|stats|health)", text):
         return actions.system_report(), True
 
-    # ---- memory ------------------------------------------------------
+    # ---- memory scopes (working / session / persistent) --------------
     m = re.match(r"remember(?: that)? my (.+?) (?:is|are) (.+)", text)
     if m:
-        memory.remember(m.group(1), m.group(2))
-        return f"Got it. I'll remember your {m.group(1)}.", True
+        msg = memory.remember(m.group(1), m.group(2))
+        if msg.lower().startswith("remembered") or "remembered" in msg.lower():
+            return f"Got it. I'll remember your {m.group(1)}.", True
+        return msg, True
     m = re.match(r"what(?:'s| is) my (.+)", text)
     if m:
         val = memory.recall(m.group(1))
         if val:
             return f"Your {m.group(1)} is {val}.", True
+    m = re.match(r"forget(?: that)? my (.+)", text)
+    if m:
+        return memory.forget(m.group(1)), True
+    if re.search(r"\b(clear|reset) working memory\b", text):
+        try:
+            from neuron.memory import scopes
+            return scopes.clear_working(), True
+        except Exception as exc:
+            return str(exc), True
+    if re.search(r"\b(clear|reset) session memory\b", text):
+        try:
+            from neuron.memory import scopes
+            return scopes.clear_session(), True
+        except Exception as exc:
+            return str(exc), True
+    if re.search(
+        r"\b(forget everything permanently|clear (all )?persistent memory|"
+        r"wipe (all )?persistent (facts|memory))\b",
+        text,
+    ):
+        try:
+            from neuron.memory import scopes
+            return scopes.clear_persistent(confirm=True), True
+        except Exception as exc:
+            return str(exc), True
+    if re.search(r"\b(clear|reset) (all )?memory\b", text):
+        try:
+            from neuron.memory import scopes
+            return scopes.clear_all(confirm_persistent=False), True
+        except Exception as exc:
+            return str(exc), True
+    if re.search(r"\b(what do you remember|memory status|list (my )?facts)\b", text):
+        try:
+            from neuron.memory import scopes
+            st = scopes.status()
+            facts = scopes.persistent().list_facts(8)
+            bits = [
+                f"Working: goal={st['working'].get('goal') or '(idle)'} "
+                f"({st['working'].get('actions', 0)} actions)",
+                f"Session: {st['session'].get('chat_turns', 0)} turns, "
+                f"apps={', '.join(st['session'].get('apps') or []) or 'none'}",
+                f"Persistent: {st['persistent'].get('facts', 0)} facts",
+            ]
+            if facts:
+                bits.append("Facts: " + "; ".join(f"{k}={v}" for k, v in list(facts.items())[:5]))
+            return " | ".join(bits), True
+        except Exception as exc:
+            return str(exc), True
 
     if re.search(r"shut ?down|restart|reboot", text):
-        return "Shutdown and restart are disabled for safety. Do it manually.", False
+        try:
+            from neuron.safety.failsafe import power_actions_disabled_message
+            return power_actions_disabled_message(), False
+        except Exception:
+            return "Shutdown and restart are disabled for safety. Do it manually.", False
 
     # ---- small talk ----------------------------------------------------
     if re.search(r"what.?s the time|what time is it|tell me the time", text):

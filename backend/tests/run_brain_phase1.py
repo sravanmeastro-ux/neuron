@@ -55,6 +55,9 @@ def test_intent_and_deterministic_agent():
     ), mock.patch(
         "neuron.brain.loop.verifier.observe_world",
         return_value={"app": "Notepad"},
+    ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
     ):
         from neuron.brain.executor import ExecutionResult
 
@@ -137,6 +140,9 @@ def test_agent_llm_path_mock():
     ), mock.patch(
         "neuron.brain.loop.verifier.observe_world",
         return_value={"url": "https://www.youtube.com/results"},
+    ), mock.patch(
+        "neuron.brain.loop.verifier.verify_goal",
+        return_value=VerifyResult(True, "final goal verified"),
     ):
         say, acted, meta = agent.run(
             "Open YouTube and search for Blender fluid simulation tutorials.",

@@ -145,75 +145,9 @@ def find_ui_element(args: dict | None = None) -> ToolResult:
 
 
 def click_ui_element(args: dict | None = None) -> ToolResult:
-    args = args or {}
-    query = _query(args)
-    if not query:
-        return fail("Need element name to click.")
-    control_type = (args.get("control_type") or args.get("type") or args.get("role") or "").strip() or None
-    allow_vision = bool(args.get("allow_vision_fallback", True))
-
-    found = find_ui_element({
-        **args,
-        "name": query,
-        "control_type": control_type or "",
-        "allow_ocr_fallback": True,
-    })
-    if not found.success:
-        if allow_vision:
-            return _vision_click_fallback(query, found)
-        return found
-
-    el = (found.state or {}).get("element") or {}
-    before = el
-    try:
-        ctrl = _locate_control(query, el)
-        if ctrl is None:
-            if allow_vision:
-                return _vision_click_fallback(query, found)
-            return fail(f"Couldn't bind control for '{query}'.", state=found.state, method="uia")
-
-        # Prefer InvokePattern, then Click, then click center via mouse
-        clicked_how = ""
-        try:
-            inv = ctrl.GetInvokePattern()
-            if inv:
-                inv.Invoke()
-                clicked_how = "invoke"
-        except Exception:
-            pass
-        if not clicked_how:
-            try:
-                ctrl.Click(simulateMove=False)
-                clicked_how = "uia-click"
-            except Exception:
-                try:
-                    import pyautogui
-                    x = int(el.get("center_x") or 0)
-                    y = int(el.get("center_y") or 0)
-                    if x and y:
-                        pyautogui.click(x, y)
-                        clicked_how = "bounds-click"
-                except Exception as exc:
-                    return fail(f"Click failed: {exc}", state=found.state, method="uia")
-
-        time.sleep(0.2)
-        # Light verify: re-scan that we still have a FG window
-        win2, _ = ui_inspect.walk_elements(max_depth=1, max_elements=5, interesting_only=False)
-        return ok(
-            f"Clicked '{el.get('name') or query}'.",
-            state={
-                "element": el,
-                "candidates": (found.state or {}).get("candidates"),
-                "method_detail": clicked_how,
-                "after_window": win2.to_dict() if win2 else {},
-                "verified": True,
-            },
-            method=f"uia:{clicked_how}",
-        )
-    except Exception as exc:
-        if allow_vision:
-            return _vision_click_fallback(query, found)
-        return fail(f"Click failed: {exc}", state={"element": before}, method="uia")
+    """Click by semantic name via Element Resolver (DOM → UIA → OCR → Vision)."""
+    from neuron.brain.element_resolver import click as resolver_click
+    return resolver_click(args or {})
 
 
 def get_element_text(args: dict | None = None) -> ToolResult:
