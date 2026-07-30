@@ -1,0 +1,47 @@
+{
+  "mode": "live",
+  "repeats": 3,
+  "tasks": 3,
+  "attempts": 9,
+  "successes": 9,
+  "failures": 0,
+  "task_success_rate": 1.0,
+  "target_rate": 0.95,
+  "meets_target": true,
+  "by_category": {
+    "apps": {
+      "attempts": 6,
+      "successes": 6,
+      "rate": 1.0
+    },
+    "input": {
+      "attempts": 3,
+      "successes": 3,
+      "rate": 1.0
+    }
+  },
+  "per_task": {
+    "open_chrome": {
+      "name": "Open Chrome",
+      "attempts": 3,
+      "successes": 3,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_notepad": {
+      "name": "Open Notepad",
+      "attempts": 3,
+      "successes": 3,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "type_hello": {
+      "name": "Type text",
+      "attempts": 3,
+      "successes": 3,
+      "failures": 0,
+      "rate": 1.0
+    }
+  },
+  "failures_detail": []
+}

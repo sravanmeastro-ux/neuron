@@ -26,11 +26,11 @@ backend/pc_inventory.json
 backend/app_memory/
 backend/voice_recipes.json
 backend/click_recipes.json
-backend/learned_procedures.json
 backend/neuron_memory.db
 backend/tts_out/
-backend/tests/reliability_report*.json
 backend/tests/reliability_*.log
+# Keep learned_procedures.json + reliability_report*.json in git (project artifacts)
+# Still ignore personal PC inventory / memory stores above.
 frontend/node_modules/
 frontend/dist/
 backend/_last_elements.txt

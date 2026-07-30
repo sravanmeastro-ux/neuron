@@ -1,0 +1,74 @@
+{
+  "procedures": [
+    {
+      "id": "notepad.type_hello",
+      "domain": "notepad",
+      "name": "type_hello",
+      "say": [
+        "type hello in notepad",
+        "notepad hello"
+      ],
+      "steps": [
+        {
+          "action": "open_app",
+          "args": {
+            "name": "notepad"
+          },
+          "target": "",
+          "expected_result": "Notepad open"
+        },
+        {
+          "action": "type_text",
+          "args": {
+            "text": "hello"
+          },
+          "target": "",
+          "expected_result": "text typed"
+        }
+      ],
+      "builtin": false,
+      "source": "test",
+      "created": "2026-07-30T12:24:47",
+      "meta": {}
+    },
+    {
+      "id": "blender.new_project",
+      "domain": "blender",
+      "name": "new_project",
+      "say": [
+        "create a new blender project",
+        "create a blender project",
+        "new blender project",
+        "create new blender project",
+        "start a new blender project",
+        "create a new project in blender"
+      ],
+      "steps": [
+        {
+          "action": "open_app",
+          "args": {
+            "name": "blender"
+          },
+          "target": "blender",
+          "expected_result": "blender is focused"
+        },
+        {
+          "action": "wait",
+          "args": {
+            "seconds": 1.5
+          },
+          "target": "settle",
+          "expected_result": "UI settled"
+        }
+      ],
+      "builtin": false,
+      "source": "demonstration",
+      "created": "2026-07-30T12:24:47",
+      "meta": {
+        "click_recipe_id": "",
+        "goal": "create a new Blender project"
+      }
+    }
+  ],
+  "updated": "2026-07-30T12:24:47"
+}
