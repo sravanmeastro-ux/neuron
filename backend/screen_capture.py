@@ -29,20 +29,49 @@ except Exception:
 
 @dataclass
 class Monitor:
-    id: int  # 1-based human id (matches Windows display numbering when possible)
+    id: int  # 1-based human id (primary first, then L→R / T→B)
     left: int
     top: int
     width: int
     height: int
     primary: bool
+    work_left: int = 0
+    work_top: int = 0
+    work_width: int = 0
+    work_height: int = 0
 
     @property
     def bbox(self) -> tuple[int, int, int, int]:
         return (self.left, self.top, self.left + self.width, self.top + self.height)
 
+    @property
+    def work_bbox(self) -> tuple[int, int, int, int]:
+        if self.work_width > 0 and self.work_height > 0:
+            return (
+                self.work_left,
+                self.work_top,
+                self.work_left + self.work_width,
+                self.work_top + self.work_height,
+            )
+        return self.bbox
+
     def label(self) -> str:
         tag = "primary" if self.primary else "secondary"
         return f"Monitor {self.id} ({tag}, {self.width}x{self.height} at {self.left},{self.top})"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "left": self.left,
+            "top": self.top,
+            "width": self.width,
+            "height": self.height,
+            "primary": self.primary,
+            "work_left": self.work_left,
+            "work_top": self.work_top,
+            "work_width": self.work_width,
+            "work_height": self.work_height,
+        }
 
 
 class RECT(ctypes.Structure):
@@ -74,7 +103,7 @@ EnumDisplayMonitorsProc = ctypes.WINFUNCTYPE(
 
 
 def list_monitors() -> list[Monitor]:
-    """Return all connected monitors with virtual-desktop coordinates."""
+    """Return all connected monitors with virtual-desktop coordinates (no hardcoded sizes)."""
     found: list[tuple] = []
 
     def _cb(hmon, _hdc, _lprc, _lp):
@@ -82,6 +111,7 @@ def list_monitors() -> list[Monitor]:
         info.cbSize = ctypes.sizeof(MONITORINFO)
         if user32.GetMonitorInfoW(hmon, ctypes.byref(info)):
             r = info.rcMonitor
+            w = info.rcWork
             found.append((
                 r.left,
                 r.top,
@@ -89,22 +119,52 @@ def list_monitors() -> list[Monitor]:
                 r.bottom - r.top,
                 bool(info.dwFlags & MONITORINFOF_PRIMARY),
                 hmon,
+                w.left,
+                w.top,
+                w.right - w.left,
+                w.bottom - w.top,
             ))
         return True
 
     user32.EnumDisplayMonitors(0, 0, EnumDisplayMonitorsProc(_cb), 0)
-    # Primary first, then left-to-right / top-to-bottom.
+    # Primary first, then left-to-right / top-to-bottom (geometry-based).
     found.sort(key=lambda m: (not m[4], m[0], m[1]))
     out = []
-    for i, (l, t, w, h, primary, _) in enumerate(found, start=1):
-        out.append(Monitor(id=i, left=l, top=t, width=w, height=h, primary=primary))
+    for i, (l, t, w, h, primary, _, wl, wt, ww, wh) in enumerate(found, start=1):
+        out.append(
+            Monitor(
+                id=i,
+                left=l,
+                top=t,
+                width=w,
+                height=h,
+                primary=primary,
+                work_left=wl,
+                work_top=wt,
+                work_width=ww,
+                work_height=wh,
+            )
+        )
     if not out:
-        # Fallback: single virtual desktop
+        # Fallback: single virtual desktop metrics from the OS
         vw = user32.GetSystemMetrics(78) or 1920
         vh = user32.GetSystemMetrics(79) or 1080
         vl = user32.GetSystemMetrics(76)
         vt = user32.GetSystemMetrics(77)
-        out.append(Monitor(id=1, left=vl, top=vt, width=vw, height=vh, primary=True))
+        out.append(
+            Monitor(
+                id=1,
+                left=vl,
+                top=vt,
+                width=vw,
+                height=vh,
+                primary=True,
+                work_left=vl,
+                work_top=vt,
+                work_width=vw,
+                work_height=vh,
+            )
+        )
     return out
 
 
@@ -203,6 +263,7 @@ def list_visible_windows(max_windows: int = 40) -> list[dict]:
         mon = monitor_for_point(cx, cy)
         results.append({
             "title": title[:100],
+            "hwnd": int(hwnd),
             "left": rect.left,
             "top": rect.top,
             "width": w,
@@ -213,6 +274,62 @@ def list_visible_windows(max_windows: int = 40) -> list[dict]:
 
     user32.EnumWindows(_enum, 0)
     return results
+
+
+def capture_foreground(padding: int = 0) -> dict | None:
+    """Screenshot the foreground window only (not the whole OS).
+
+    Returns {image, title, left, top, width, height, monitor_id} or None.
+    """
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return None
+    length = user32.GetWindowTextLengthW(hwnd)
+    title = ""
+    if length > 0:
+        buf = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buf, length + 1)
+        title = (buf.value or "").strip()
+    if title.startswith("N.E.U.R.O.N"):
+        # Prefer the next useful window — NEURON overlay is not the user's app.
+        wins = [w for w in list_visible_windows(20) if not w["title"].startswith("N.E.U.R.O.N")]
+        if not wins:
+            return None
+        # Largest non-NEURON window as proxy for "what user is looking at"
+        w = max(wins, key=lambda x: x["width"] * x["height"])
+        left, top, width, height = w["left"], w["top"], w["width"], w["height"]
+        title = w["title"]
+        mon_id = w["monitor_id"]
+    else:
+        rect = RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return None
+        left = rect.left - padding
+        top = rect.top - padding
+        width = (rect.right - rect.left) + 2 * padding
+        height = (rect.bottom - rect.top) + 2 * padding
+        if width < 80 or height < 80:
+            return None
+        mon = monitor_for_point(left + width // 2, top + height // 2)
+        mon_id = mon.id if mon else 1
+
+    try:
+        img = ImageGrab.grab(
+            bbox=(left, top, left + width, top + height),
+            all_screens=True,
+        )
+    except Exception:
+        return None
+    return {
+        "image": img,
+        "title": title[:120],
+        "left": left,
+        "top": top,
+        "width": width,
+        "height": height,
+        "monitor_id": mon_id,
+        "label": f'Foreground: "{title[:80]}" ({width}x{height} at {left},{top})',
+    }
 
 
 def structural_overview() -> str:

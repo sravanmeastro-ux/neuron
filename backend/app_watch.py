@@ -1,9 +1,11 @@
-"""Auto app-understanding for N.E.U.R.O.N.
+"""App learning helpers for N.E.U.R.O.N.
 
-When an app is opened (by NEURON or by the user), a foreground watcher
-notices the active window, scans its UI (accessibility tree + optional
-vision), and saves how-to knowledge under app_memory/ — so later voice
-commands already know how that app works.
+By default NEURON does NOT scan every focused window (that spam is off).
+OS-wide knowledge comes from pc_trainer inventory ("learn my computer").
+Deep UI learn runs only when:
+  - you say "learn how <app> works", or
+  - learn_on_open is enabled and NEURON opens an app, or
+  - watch_foreground is explicitly enabled in config.
 """
 
 from __future__ import annotations
@@ -32,6 +34,25 @@ def is_enabled() -> bool:
     return bool(_cfg().get("enabled", True))
 
 
+def watch_foreground_enabled() -> bool:
+    """Foreground watcher — off by default (was causing learn-spam on every app)."""
+    return bool(_cfg().get("watch_foreground", False)) and is_enabled()
+
+
+def learn_on_open_enabled() -> bool:
+    return bool(_cfg().get("learn_on_open", False)) and is_enabled()
+
+
+def _quiet() -> bool:
+    return bool(_cfg().get("quiet", True))
+
+
+def _log(msg: str) -> None:
+    if _quiet() and ("Already know" in msg or "skip" in msg.lower()):
+        return
+    print(f"[auto_learn] {msg}", flush=True)
+
+
 def _ignore_title(title: str) -> bool:
     t = (title or "").lower()
     if not t or len(t) < 2:
@@ -39,20 +60,23 @@ def _ignore_title(title: str) -> bool:
     skip = (
         "n.e.u.r.o.n", "neuron", "program manager", "task switching",
         "task view", "windows input experience", "nvidia geforce overlay",
-        "cursor",  # don't auto-learn the IDE while editing; explicit open_app still can
+        "cursor",
     )
-    # Allow learning Cursor if explicitly opened via open_app — handled by force flag
     return any(s in t for s in skip)
 
 
 def schedule_learn(app_hint: str = "", *, settle_s: float = None, force: bool = False):
-    """Queue a background learn for the app that is/will be in the foreground.
+    """Queue a background deep-learn for one app.
 
-    Non-blocking. Debounced per app slug so opening Steam library then
-    community does not re-learn twice in a row.
+    Skipped unless force=True, or learn_on_open / watch_foreground is on.
     """
-    if not is_enabled() and not force:
+    if not force and not is_enabled():
         return
+    # Explicit "learn how X works" uses app_learner directly (force).
+    # schedule_learn from open_app / watcher needs the matching flag.
+    if not force and not learn_on_open_enabled() and not watch_foreground_enabled():
+        return
+
     hint = (app_hint or "").strip() or "foreground"
     cfg = _cfg()
     settle = float(settle_s if settle_s is not None else cfg.get("settle_seconds", 2.5))
@@ -76,7 +100,7 @@ def schedule_learn(app_hint: str = "", *, settle_s: float = None, force: bool = 
                     force=force,
                 )
             if msg:
-                print(f"[auto_learn] {msg}", flush=True)
+                _log(msg)
         except Exception as exc:
             print(f"[auto_learn] failed: {exc}", flush=True)
         finally:
@@ -112,7 +136,6 @@ def _app_hint_from_window(title: str, process: str = "") -> str:
     for key, hint in known.items():
         if key in p or key in t.lower():
             return hint
-    # "Document - AppName" → prefer right side when it looks like an app name
     for sep in (" — ", " - ", " | "):
         if sep in t:
             left, right = t.rsplit(sep, 1)
@@ -173,16 +196,22 @@ def _poll_foreground_once():
         _last_fg = title
         return
 
-    # New foreground app — learn it (unless we already know it well).
     _last_fg = title
     hint = _app_hint_from_window(title, proc)
     schedule_learn(hint, settle_s=_cfg().get("fg_settle_seconds", 1.5))
 
 
 def start_watcher():
-    """Poll the active window and auto-learn newly focused apps."""
+    """Optional: poll focused windows and deep-learn them (OFF by default)."""
     global _watcher_started
-    if _watcher_started or not is_enabled():
+    if _watcher_started:
+        return
+    if not watch_foreground_enabled():
+        print(
+            "[auto_learn] foreground watcher OFF "
+            "(use 'learn my computer' for OS map, 'learn how X works' for one app)",
+            flush=True,
+        )
         return
     _watcher_started = True
     interval = float(_cfg().get("poll_seconds", 2.0))

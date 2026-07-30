@@ -10,3 +10,11 @@ faster-whisper
 numpy
 nvidia-cublas-cu12
 nvidia-cudnn-cu12
+pyautogui
+pywinauto
+rapidocr-onnxruntime
+# Optional Phase 6 extras (local/free):
+# openwakeword
+# sounddevice
+# Phase 7 local TTS (Windows SAPI via pyttsx3; Piper optional CLI)
+pyttsx3

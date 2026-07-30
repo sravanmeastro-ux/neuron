@@ -105,6 +105,27 @@ KNOWN_SHORTCUTS = {
     },
 }
 
+# Merge curated priority playbooks (Discord, Google, Opera, Settings, …)
+try:
+    import priority_apps as _priority_apps
+    for _slug, _data in _priority_apps.PRIORITY.items():
+        if _slug not in KNOWN_SHORTCUTS:
+            KNOWN_SHORTCUTS[_slug] = dict(_data)
+        else:
+            base = dict(KNOWN_SHORTCUTS[_slug])
+            for k, v in _data.items():
+                if k == "voice_commands" and isinstance(v, list):
+                    merged = list(v) + [c for c in (base.get("voice_commands") or []) if c not in v]
+                    base["voice_commands"] = merged[:16]
+                elif k not in base or not base.get(k):
+                    base[k] = v
+            KNOWN_SHORTCUTS[_slug] = base
+    # Alias settings → windows-settings knowledge
+    if "windows-settings" in KNOWN_SHORTCUTS:
+        KNOWN_SHORTCUTS["settings"] = dict(KNOWN_SHORTCUTS["windows-settings"])
+except Exception:
+    pass
+
 
 def _slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", (name or "app").lower()).strip("-")

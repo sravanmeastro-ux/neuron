@@ -97,6 +97,10 @@ class FakeBrowser:
         rec.calls.append(("play_by_title", (title,), {}))
         return f"Playing by title: {title}."
 
+    def list_visible_videos(self):
+        rec.calls.append(("list_visible_videos", (), {}))
+        return "I can see 5 videos on screen: 1) Demo A; 2) Demo B."
+
     def close_browser(self):
         rec.calls.append(("close_browser", (), {}))
         return "Closed Chrome."
@@ -130,7 +134,7 @@ def install_mocks():
         "screenshot", "lock_pc", "battery_status", "cpu_status",
         "ram_status", "system_report", "current_time", "current_date",
         "search_web", "open_website", "search_site", "steam_goto",
-        "steam_select_account",
+        "steam_select_account", "discord_friends", "open_settings",
         "open_folder", "close_app",
     ]:
         setattr(a, name, rec.make(name))
@@ -148,6 +152,14 @@ def install_mocks():
     )
     brain.app_learner.recall_summary = lambda name: (
         rec.calls.append(("recall_summary", (name,), {})) or f"I know {name}."
+    )
+
+    import re as _re
+    import howto_learn
+    howto_learn.learn_from_utterance = lambda text: (
+        rec.calls.append(("howto_learn", (text,), {})) or "Learned from the web."
+        if _re.search(r"youtube|google|tutorial|internet|ask google|learn from|train from", text, _re.I)
+        else None
     )
 
     class FakeVision:
@@ -169,6 +181,11 @@ def install_mocks():
             return "I see your screens."
 
         @staticmethod
+        def answer_screen(request="", monitor_id=None):
+            rec.calls.append(("answer_screen", (request, monitor_id), {}))
+            return "I see the front app."
+
+        @staticmethod
         def computer_use(goal, max_steps=None):
             rec.calls.append(("computer_use", (goal,), {}))
             return "done"
@@ -179,6 +196,26 @@ def install_mocks():
         lambda raw, ctx="", model=None, normalized="":
         rec.calls.append(("llm_plan", (raw,), {})) or {"say": "", "steps": []}
     )
+    brain.brain_llm.chat_json = lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("rules suite: chat_json mocked offline")
+    )
+    # This suite asserts regex/recipe routes — not the Phase 1 Ollama planner.
+    brain._agent_config = lambda: {
+        "enabled": True,
+        "agent_first": False,
+        "legacy_fallback": True,
+        "max_replans": 0,
+        "tool_timeout_seconds": 5,
+    }
+
+    import click_recorder
+    click_recorder.start = rec.make("click_start", "Recording your clicks.")
+    click_recorder.stop = rec.make("click_stop", "Saved clicks.")
+    click_recorder.cancel = rec.make("click_cancel", "Cancelled.")
+    click_recorder.list_recipes = rec.make("click_list", "No recipes.")
+    click_recorder.status = rec.make("click_status", "Not recording.")
+    click_recorder.replay = rec.make("click_replay", "Replayed.")
+    click_recorder.is_recording = lambda: False
 
 
 # (sentence, expected_call, arg_check or None)
@@ -218,6 +255,18 @@ CASES = [
     ("in steam open library", "steam_goto", None),
     ("open the library tab in steam", "steam_goto", None),
     ("steam store", "steam_goto", None),
+    ("open friends chat", "discord_friends", None),
+    ("open friend chat", "discord_friends", None),
+    ("open discord friends", "discord_friends", None),
+    ("open dms", "discord_friends", None),
+    ("open steam friends", "steam_goto", None),
+    ("steam friends chat", "steam_goto", None),
+    ("start recording clicks", "click_start", None),
+    ("stop recording", "click_stop", None),
+    ("list click recipes", "click_list", None),
+    ("replay my workflow", "click_replay", None),
+    ("learn from youtube how to open discord friends", "howto_learn", None),
+    ("ask google how to render in blender", "howto_learn", None),
     ("open youtube", "open_site", None),
     ("open youtube in chrome", "open_site", None),
     ("learn how youtube works", "learn_website", lambda c: "youtube" in str(c[1])),
@@ -286,9 +335,9 @@ CASES = [
     ("how are you doing", "llm_plan", None),  # may be small-talk; see runner soft-match
     # --- vision --------------------------------------------------------------
     ("take control and click the start button", "computer_use", None),
-    ("what's on my screen", "describe_screen", None),
-    ("what is on my screens", "describe_screen", None),
-    ("describe my monitors", "describe_screen", None),
+    ("what's on my screen", "answer_screen", None),
+    ("what is on my screens", "answer_screen", None),
+    ("describe my monitors", "answer_screen", None),
     ("look at monitor 1", "describe_screen", None),
     ("stop talking", "__STOP_SPEECH__", None),
     ("click that button on the other screen", "computer_use", None),
@@ -344,6 +393,9 @@ CASES_ON_YT = [
     ("play the video called iron man suit up", "play_by_title", lambda c: "iron man" in c[1][0]),
     ("play avengers endgame trailer", "play_by_title", lambda c: "avengers" in c[1][0]),
     ("scroll down", "page_scroll", lambda c: c[1][0] == "down"),
+    ("how many videos can you see on screen right now", "list_visible_videos", None),
+    ("what videos are on screen", "list_visible_videos", None),
+    ("list the videos on youtube", "list_visible_videos", None),
 ]
 
 

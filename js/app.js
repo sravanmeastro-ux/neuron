@@ -23,6 +23,7 @@
   let sttReady = false;
   let useWhisper = true;
   let speaking = false;
+  let currentAudio = null;
 
   function isStopTalk(text) {
     return /\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b/i.test(
@@ -32,6 +33,14 @@
 
   function stopTalking(announce) {
     if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (currentAudio) {
+      try {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio.src = "";
+      } catch (_) {}
+      currentAudio = null;
+    }
     speaking = false;
     muted = false;
     sendControl({ mute: false });
@@ -110,16 +119,32 @@
       }
 
       if (msg.type === "hearing") {
-        if (!muted && !busy) {
+        if (!muted) {
           lastWordAt = Date.now();
           speechEnergy = Math.max(speechEnergy, Math.min(1, (msg.level || 0.4) * 1.6));
-          setStatus("HEARING YOU...");
+          if (!busy) setStatus("HEARING YOU...");
         }
         return;
       }
 
+      if (msg.type === "partial" && msg.text) {
+        transcriptEl.textContent = msg.text;
+        transcriptEl.classList.add("interim");
+        lastWordAt = Date.now();
+        speechEnergy = Math.max(speechEnergy, 0.5);
+        if (!busy && !muted) setStatus("HEARING YOU...");
+        return;
+      }
+
       if (msg.type === "status" && msg.text) {
-        setStatus(msg.text);
+        // Rejected speech: show what was ignored so it doesn't feel "deaf"
+        if (msg.rejected && msg.heard) {
+          transcriptEl.textContent = "(" + msg.heard + ")";
+          transcriptEl.classList.add("interim");
+        }
+        if (!(busy && msg.text === "LISTENING")) {
+          setStatus(msg.text);
+        }
         return;
       }
 
@@ -161,10 +186,38 @@
         }
         if (msg.text) {
           responseEl.textContent = msg.text;
-          speak(speakable(msg.text));
+          if (msg.audio_url) {
+            try {
+              if (currentAudio) {
+                try {
+                  currentAudio.pause();
+                } catch (_) {}
+              }
+              const a = new Audio(msg.audio_url);
+              currentAudio = a;
+              a.onended = a.onerror = () => {
+                if (currentAudio === a) currentAudio = null;
+                speaking = false;
+                if (active && !muted) setStatus("LISTENING");
+              };
+              speaking = true;
+              a.play().catch(() => speak(speakable(msg.text)));
+            } catch (_) {
+              speak(speakable(msg.text));
+            }
+          } else {
+            speak(speakable(msg.text));
+          }
         } else if (active && !muted) {
           setStatus("LISTENING");
         }
+      }
+      if (msg.type === "confirm") {
+        busy = false;
+        if (msg.heard) transcriptEl.textContent = msg.heard;
+        responseEl.textContent = msg.text || msg.reason || "Confirm?";
+        speak(speakable(msg.text || "Please confirm."));
+        setStatus("CONFIRM REQUIRED");
       }
     };
 
@@ -296,6 +349,27 @@
     return buf;
   }
 
+  async function ensureAudioRunning() {
+    if (!audioCtx) return false;
+    if (audioCtx.state === "suspended") {
+      try {
+        await audioCtx.resume();
+      } catch (_) {}
+    }
+    return audioCtx.state === "running";
+  }
+
+  function armMicOnGesture() {
+    ensureAudioRunning().then((ok) => {
+      if (ok && sttReady && active && !busy) {
+        setStatus("LISTENING");
+      } else if (ok && sttReady) {
+        const tag = (window.__sttBackend || "whisper").toUpperCase();
+        if (!busy) setStatus("LISTENING (" + tag + ")");
+      }
+    });
+  }
+
   async function startWhisperMic() {
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -312,6 +386,7 @@
     }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await ensureAudioRunning();
     micSource = audioCtx.createMediaStreamSource(mediaStream);
 
     // Meter
@@ -333,15 +408,17 @@
     const bufferSize = 4096;
     processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
     processor.onaudioprocess = (e) => {
-      // Allow audio while speaking so "stop talking" can barge in.
-      // Block only during unrelated mute (legacy) without speaking, or when not ready.
+      // Keep streaming while WORKING so barge-in / VAD still hear the user.
+      // Server ignores duplicate commands while busy.
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       if (!sttReady) return;
       if (muted && !speaking) return;
-      if (busy && !speaking) return;
+      ensureAudioRunning();
       const input = e.inputBuffer.getChannelData(0);
       const down = downsampleTo16k(input, audioCtx.sampleRate);
-      ws.send(floatTo16BitPCM(down));
+      try {
+        ws.send(floatTo16BitPCM(down));
+      } catch (_) {}
     };
     micSource.connect(processor);
     processor.connect(audioCtx.destination); // required for some browsers to fire
@@ -424,6 +501,23 @@
     connectBrain();
     const ok = await startWhisperMic();
     if (!ok) return;
+
+    // Edge/Chrome often suspend AudioContext until a click — click the core to arm mic.
+    canvas.addEventListener("pointerdown", armMicOnGesture);
+    window.addEventListener("focus", armMicOnGesture);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) armMicOnGesture();
+    });
+    armMicOnGesture();
+
+    // Safety: never stay WORKING forever (would look like "deaf")
+    setInterval(() => {
+      if (busy && Date.now() - lastSentAt > 90000) {
+        busy = false;
+        if (active && !muted) setStatus("LISTENING");
+      }
+      ensureAudioRunning();
+    }, 5000);
 
     // If Whisper never becomes ready within 3 minutes, fall back.
     // OpenAI Whisper turbo first load on GPU can exceed 45s.

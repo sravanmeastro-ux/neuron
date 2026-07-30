@@ -31,9 +31,9 @@ class FakePage:
             vis_w = max(0, min(right, 1600) - max(left, 0))
             ratio = (vis_h * vis_w) / max(1, w * h)
             if visible_only:
-                if ratio < 0.72:
+                if ratio < 0.55:
                     continue
-                if top < -40:
+                if top < -60:
                     continue
             seen.add(v["id"])
             scored.append({**v, "top": top, "left": left, "ratio": ratio})

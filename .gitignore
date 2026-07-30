@@ -24,6 +24,12 @@ backend/.neuron-chrome/
 backend/memory_store.json
 backend/pc_inventory.json
 backend/app_memory/
+backend/voice_recipes.json
+backend/click_recipes.json
+backend/neuron_memory.db
+backend/tts_out/
+frontend/node_modules/
+frontend/dist/
 backend/_last_elements.txt
 backend/_last_*.txt
 

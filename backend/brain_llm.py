@@ -28,9 +28,9 @@ _THINK_FAMILIES = ("qwen3", "deepseek-r1", "gpt-oss", "magistral")
 TOOLS_DOC = """
 ACTIONS (only these):
 open_app{name} | close_app{name} | steam_goto{section} | steam_select_account{index,name?}
-learn_app{name} | train_pc{deep_learn?} | training_status{} | stop_training{}
+discord_friends{} | open_settings{page?} | replay_clicks{id?,say?} | learn_app{name} | train_pc{deep_learn?} | training_status{} | stop_training{}
 open_website{site,browser?} | search_site{site,query} | search_web{query}
-youtube_home{} | youtube_home_play{index} | play_by_title{title} | play_result{index,where?} | skip_ad{}
+youtube_home{} | youtube_home_play{index} | play_by_title{title} | play_result{index,where?} | list_visible_videos{} | skip_ad{}
 fullscreen{exit?} | player_key{key} | ensure_playback{want:play|pause}
 click_text{text} | page_scroll{direction:up|down} | scroll{direction}
 type_text{text} | press_keys{keys} | click{button?,double?}
@@ -39,15 +39,21 @@ window{action} | screenshot{all?} | describe_screen{request?} | create_folder{na
 create_file{name,content?,location?} | open_folder{location}
 run_shell{command} | wait{seconds} | system_report{} | computer_use{goal}
 RULES: websites→open_website/search_site (not open_app). Steam tabs→steam_goto.
+"open friends chat" / Discord DMs→discord_friends. Steam friends→steam_goto{section:friends}.
+Windows Settings→open_settings{page}. Google→open_website/search_site. Opera/Blender/WhatsApp/Notepad→open_app.
+Teach mouse workflows→user says start recording clicks, then stop recording / remember that as …
+OR research tutorials→"learn from youtube how to X" / "ask google how to X" (saves recipes from captions/snippets).
+replay_clicks for saved click recipes. NEVER silently record all clicks forever.
 Steam login / "first account" / "Who's playing"→steam_select_account — NEVER search_web,
 NEVER open_app with a long phrase (that opens Windows Search / Bing).
-"learn my computer"→train_pc (background inventory + deep learn).
-"analyze/learn how steam works"→learn_app (NEVER steam_goto). Remembers UI for later control.
+"learn my computer"→train_pc (inventory all apps; prefer deep_learn false unless user wants deep).
+"analyze/learn how steam works"→learn_app (ONE app). NEVER auto-scan every focused window.
+Unknown UI / click that→computer_use.
 "what's on my screen(s)"→describe_screen. "click that / on my other screen"→computer_use.
 "close chrome/notepad"→close_app (NEVER click_text Close). close tab→press_keys control w.
 fullscreen video→fullscreen (never window maximize). minimize the video→miniplayer (never window minimize).
 exit fullscreen→fullscreen{exit}. skip ad→skip_ad only.
-play Nth on YT home→youtube_home_play. Go/come back to YT home→youtube_home (NEVER play). Play by visible title→play_by_title. Prefer 1 step. computer_use for in-app UI / visual deixis.
+play Nth on YT home→youtube_home_play. Go/come back to YT home→youtube_home (NEVER play). Play by visible title→play_by_title. How many/what videos on screen→list_visible_videos (NEVER play_result). Prefer 1 step. computer_use for in-app UI / visual deixis.
 When LIVE SCREENS context is present, use it — don't invent what's open.
 NEVER use search_web / Windows Start for desktop control ("open X account", "click…").
 Use PC INVENTORY app names with open_app when present.
@@ -56,7 +62,7 @@ Use PC INVENTORY app names with open_app when present.
 SYSTEM_PROMPT = """You are {name}, a Windows desktop voice AI.
 Personality: {personality}
 The user speaks normally and simply (e.g. "open chrome", "close chrome", "pause the video").
-Understand plain English. Do not invent fancy interpretations.
+They do NOT need to say your name — hands-free. Understand plain English. Do not invent fancy interpretations.
 Reply with STRICT JSON only:
 {{"say":"<short spoken reply>","steps":[{{"action":"<name>","args":{{...}}}}]}}
 - Empty steps only for pure chat.
@@ -201,10 +207,26 @@ def plan(request: str, context: str = "", model: str = None, normalized: str = "
     llm = cfg["llm"]
     assistant = cfg.get("assistant", {})
     mdl = model or llm["model"]
+    tools = TOOLS_DOC
+    try:
+        from neuron.brain import tool_registry
+        tool_registry.ensure_bootstrapped()
+        # Registry is source of truth; keep RULES trailer from TOOLS_DOC
+        rules_tail = TOOLS_DOC.split("RULES:", 1)[-1] if "RULES:" in TOOLS_DOC else ""
+        tools = tool_registry.tools_doc()
+        if rules_tail:
+            tools = tools + "\nRULES:" + rules_tail
+        # Prefer UIA over coords
+        tools += (
+            "\nPrefer get_ui_tree/find_ui_element/click_ui_element over click/move_mouse. "
+            "Coordinate clicking is last resort only."
+        )
+    except Exception:
+        pass
     system = SYSTEM_PROMPT.format(
         name=assistant.get("name", "NEURON"),
         personality=assistant.get("personality", "witty, concise"),
-        tools=TOOLS_DOC,
+        tools=tools,
         skills=skills.for_prompt(),
         app_knowledge=app_knowledge.for_prompt(),
     )

@@ -40,7 +40,10 @@ APPS = {
     "powerpoint": "powerpnt",
     "spotify": "spotify",
     "steam": "steam",
+    "discord": "discord",
     "whatsapp": "whatsapp",
+    "opera": "opera",
+    "blender": "blender",
     "vs code": "code",
     "code": "code",
     "cursor": "cursor",
@@ -150,7 +153,57 @@ BROWSER_EXES = {
     "microsoft edge": "msedge",
     "firefox": "firefox",
     "brave": "brave",
+    "opera": "opera",
 }
+
+# Windows Settings deep links (ms-settings:)
+SETTINGS_PAGES = {
+    "home": "ms-settings:",
+    "settings": "ms-settings:",
+    "system": "ms-settings:system",
+    "display": "ms-settings:display",
+    "sound": "ms-settings:sound",
+    "notifications": "ms-settings:notifications",
+    "bluetooth": "ms-settings:bluetooth",
+    "devices": "ms-settings:bluetooth",
+    "wifi": "ms-settings:network-wifi",
+    "wi-fi": "ms-settings:network-wifi",
+    "network": "ms-settings:network",
+    "personalization": "ms-settings:personalization",
+    "apps": "ms-settings:appsfeatures",
+    "privacy": "ms-settings:privacy",
+    "accounts": "ms-settings:accounts",
+    "time": "ms-settings:dateandtime",
+    "date": "ms-settings:dateandtime",
+    "update": "ms-settings:windowsupdate",
+    "windows update": "ms-settings:windowsupdate",
+    "gaming": "ms-settings:gaming-gamebar",
+    "storage": "ms-settings:storagesense",
+}
+
+
+def open_settings(page: str = "home") -> str:
+    """Open a Windows Settings page via ms-settings: URI."""
+    key = (page or "home").strip().lower()
+    key = key.replace("windows ", "").replace(" settings", "").strip() or "home"
+    uri = SETTINGS_PAGES.get(key)
+    if not uri:
+        # Fuzzy: bluetooth settings → bluetooth
+        for name, link in SETTINGS_PAGES.items():
+            if name in key or key in name:
+                uri = link
+                key = name
+                break
+    if not uri:
+        uri = "ms-settings:"
+        key = "home"
+    os.startfile(uri)
+    try:
+        import app_context
+        app_context.set_app("windows-settings")
+    except Exception:
+        pass
+    return f"Opened Windows Settings ({key})."
 
 
 def _resolve_exe(command: str):
@@ -177,6 +230,19 @@ def _resolve_exe(command: str):
 
 
 def open_app(name: str, *, auto_learn: bool = True) -> str:
+    """Launch or focus an app (Phase 2: resolve → launch → wait → verify)."""
+    try:
+        from neuron.windows.apps import open_app as _phase2_open
+        result = _phase2_open({"name": name, "auto_learn": auto_learn})
+        if not result.success:
+            raise RuntimeError(result.error or str(result))
+        return str(result)
+    except RuntimeError:
+        raise
+    except Exception:
+        # Fall through to classic path if Phase 2 import fails mid-boot
+        pass
+
     name = name.strip().lower().strip(" .!?")
     # Websites are NEVER apps — opening them via Start Menu / Win search is wrong.
     if name in WEB_SERVICES or name in ("yt",):
@@ -233,9 +299,11 @@ def _looks_like_command_phrase(name: str) -> bool:
 
 
 def _schedule_learn_safe(name: str):
-    """After opening an app, study how it works in the background."""
+    """After opening an app, optionally deep-learn it (off unless learn_on_open)."""
     try:
         import app_watch
+        if not app_watch.learn_on_open_enabled():
+            return
         app_watch.schedule_learn(name, settle_s=3.0)
     except Exception:
         pass
@@ -387,6 +455,65 @@ def _click_steam_tab(label: str) -> bool:
             return True
         except Exception:
             return False
+
+
+def discord_friends() -> str:
+    """Open Discord and jump to Friends / DMs (Friends chat)."""
+    import time as _time
+
+    # Launch / focus Discord
+    try:
+        open_app("discord", auto_learn=False)
+    except Exception:
+        # Fallback: protocol may still focus an already-running client
+        pass
+    _time.sleep(1.4)
+    # Official-ish deep link to the me / DMs home (Friends list lives here).
+    for uri in (
+        "discord://-/channels/@me",
+        "discord://-/channels/@me/",
+    ):
+        try:
+            os.startfile(uri)
+            break
+        except Exception:
+            continue
+    _time.sleep(0.8)
+    # Focus Discord window
+    try:
+        import uiautomation as auto
+        root = auto.GetRootControl()
+        for w in root.GetChildren():
+            try:
+                name = (w.Name or "").lower()
+                if "discord" in name and "neuron" not in name:
+                    w.SetFocus()
+                    break
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        import app_context
+        app_context.set_app("discord")
+    except Exception:
+        pass
+    # Nudge Friends: Ctrl+Alt+Shift isn't standard; clicking via UIA "Friends"
+    try:
+        import uiautomation as auto
+        fg = auto.GetForegroundControl()
+        if fg:
+            for ctrl in fg.GetChildren()[:40]:
+                try:
+                    nm = (ctrl.Name or "").strip().lower()
+                    if nm in ("friends", "friends & dms", "direct messages", "dms"):
+                        ctrl.Click()
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return "Opened Discord Friends chat."
 
 
 def steam_goto(section: str = "library") -> str:

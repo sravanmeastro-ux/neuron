@@ -91,11 +91,22 @@ _SKIP_GLANCE = re.compile(
     re.I,
 )
 
-# VLM is expensive — only when user explicitly asks to look / describe.
+# VLM is expensive — when user asks to look / count / describe on-screen content.
 _NEED_VLM = re.compile(
     r"\b(what(?:'s| is|s) on|describe|look at|see (?:my |the )?(?:screen|monitor)|"
     r"watch (?:my |the )?(?:screen|monitor)|use your eyes|"
+    r"how many|what(?:'s| is)? (?:that|this|the)|"
+    r"can you see|do you see|tell me what|"
     r"click that|on (?:my |the )?(?:other|second|left|right) (?:screen|monitor))\b",
+    re.I,
+)
+
+_SCREEN_QA = re.compile(
+    r"\b(what(?:'s| is|s)|describe|look at|see|saw|seeing|how many|count|list|which|tell me)\b"
+    r".*\b(screen|screens|monitor|monitors|display|desktop|window|app|there|here)\b"
+    r"|\b(can you|do you) see\b"
+    r"|\bwhat(?:'s| is) (?:that|this)\b"
+    r"|\bhow many\b.+\b(on|in)\b",
     re.I,
 )
 
@@ -108,7 +119,122 @@ def needs_glance(text: str) -> bool:
 
 
 def needs_vlm_glance(text: str) -> bool:
-    return bool(_NEED_VLM.search(text or ""))
+    return bool(_NEED_VLM.search(text or "") or _SCREEN_QA.search(text or ""))
+
+
+def answer_screen(request: str = "", monitor_id: int = None) -> str:
+    """Answer any on-screen question for the ACTIVE APP (not whole OS dump).
+
+    Uses: foreground window screenshot + UI Automation labels + VLM.
+    YouTube video tile questions should be handled by browser.list_visible_videos first.
+    """
+    if not is_enabled():
+        return "My vision system isn't enabled yet."
+
+    req = (request or "").strip() or "what is on screen"
+    # Grounding: readable controls in the foreground app
+    uia_bit = ""
+    try:
+        elements = vision.capture_elements(
+            all_monitors=False, max_elements=60, time_budget=3.0
+        )
+        if elements:
+            uia_bit = vision.elements_as_text(elements)[:1800]
+    except Exception as exc:
+        print(f"[vision] UIA ground failed: {exc}", flush=True)
+
+    fg = None
+    try:
+        fg = sc.capture_foreground()
+    except Exception as exc:
+        print(f"[vision] foreground capture failed: {exc}", flush=True)
+
+    shots = []
+    if fg and fg.get("image") is not None:
+        shots = [{
+            "label": fg["label"],
+            "image": fg["image"],
+            "monitor": type("M", (), {"id": fg.get("monitor_id", 1)})(),
+        }]
+    else:
+        try:
+            import monitor_focus
+            if monitor_id is None:
+                monitor_id = monitor_focus.get_focus()
+        except Exception:
+            pass
+        shots = sc.capture_all_monitors()
+        if monitor_id:
+            shots = [s for s in shots if s["monitor"].id == int(monitor_id)] or shots[:1]
+
+    if not shots and not uia_bit:
+        try:
+            return "Here's what I can see: " + sc.structural_overview().replace("\n", " ")
+        except Exception:
+            return "I couldn't capture the screen."
+
+    max_w = int(_vision_cfg().get("glance_max_width", 1024))
+    quality = int(_vision_cfg().get("glance_jpeg_quality", 55))
+    prompt = (
+        "You are NEURON's eyes for a Windows desktop voice assistant.\n"
+        "Answer the user's question about what is ACTUALLY visible in the image(s).\n"
+        "Be concrete: count items, read labels/titles, name buttons and panels.\n"
+        "If counting tiles/cards/icons, give the number and list readable names.\n"
+        "2–5 short spoken sentences. No markdown.\n"
+        f"User asked: {req}\n"
+    )
+    if uia_bit:
+        prompt += (
+            "\nUI Automation labels from the foreground app (use to ground names):\n"
+            + uia_bit
+            + "\n"
+        )
+
+    content = [{"type": "text", "text": prompt}]
+    for shot in shots[:2]:
+        b64 = sc.encode_jpeg(shot["image"], quality=quality, max_w=max_w)
+        content.append({"type": "text", "text": shot.get("label") or "Screen"})
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        })
+
+    model = _vision_cfg().get("model", "qwen2.5vl:7b")
+    try:
+        resp = _get_client().chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            temperature=0.15,
+            max_tokens=220,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        text = re.sub(r"[#*_`]", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) > 420:
+            text = text[:400].rsplit(" ", 1)[0] + "."
+        if text:
+            return text
+    except Exception as exc:
+        print(f"[vision] answer_screen failed: {exc}", flush=True)
+
+    if uia_bit:
+        # Fallback without VLM: speak control names
+        names = []
+        for ln in uia_bit.splitlines()[:12]:
+            m = re.search(r':\s*"([^"]+)"', ln)
+            if m:
+                names.append(m.group(1)[:60])
+        if names:
+            return (
+                f"I can read {len(names)} controls in the front window: "
+                + "; ".join(names[:8])
+                + ("." if len(names) <= 8 else f"; and {len(names) - 8} more.")
+            )
+    # Last resort: multi-monitor structural map
+    try:
+        return "Here's what I can see: " + sc.structural_overview().replace("\n", " ")
+    except Exception:
+        return "I couldn't read the screen clearly just now."
 
 
 def structural_glance(force: bool = False) -> str:
@@ -206,9 +332,12 @@ def quick_screen_context(request: str = "", *, force_vlm: bool = False) -> str:
 
 
 def describe_screens(request: str = "", monitor_id: int = None) -> str:
-    """Spoken answer: what's on the screen(s). Prefer focused / requested monitor."""
+    """Spoken answer: what's on the screen(s). Prefer active-app vision for Q&A."""
     if not is_enabled():
         return "My vision system isn't enabled yet."
+    # Specific questions → foreground app VLM + UIA (works for ANY app).
+    if request and (_SCREEN_QA.search(request) or needs_vlm_glance(request)):
+        return answer_screen(request, monitor_id=monitor_id)
 
     try:
         import monitor_focus
@@ -322,6 +451,65 @@ i.e. clickable by the OS mouse. Prefer the monitor that matches the user's reque
 
 
 def _choose_from_screenshot(goal, history, screen_ctx: str = ""):
+    # Prefer the foreground APP window — not a blurry whole-desktop glance.
+    fg = None
+    try:
+        fg = sc.capture_foreground()
+    except Exception:
+        fg = None
+
+    shots = []
+    scale_meta = []
+    max_w = int(_vision_cfg().get("act_max_width", 1280))
+    quality = int(_vision_cfg().get("act_jpeg_quality", 55))
+
+    if fg and fg.get("image") is not None:
+        img = fg["image"]
+        scaled = sc.downscale(img, max_w=max_w)
+        sx = fg["width"] / max(1, scaled.width)
+        sy = fg["height"] / max(1, scaled.height)
+        # Fake monitor origin = window top-left so clicks map to absolute coords
+        mon = type("M", (), {
+            "id": fg.get("monitor_id", 1),
+            "left": fg["left"],
+            "top": fg["top"],
+            "width": fg["width"],
+            "height": fg["height"],
+        })()
+        scale_meta.append((mon, sx, sy, scaled.size))
+        b64 = sc.encode_jpeg(img, quality=quality, max_w=max_w)
+        content = [{
+            "type": "text",
+            "text": (
+                f"GOAL: {goal}\n"
+                f"Image is the FOREGROUND app window: {fg.get('title')}\n"
+                f"Window origin left={fg['left']}, top={fg['top']}, size {fg['width']}x{fg['height']}.\n"
+                f"Image is {scaled.width}x{scaled.height} (scale *{sx:.3f},*{sy:.3f}).\n"
+                "Click x,y must be ABSOLUTE virtual-desktop pixels "
+                "(window origin + local offset in the image).\n"
+                + (f"Context:\n{screen_ctx[:1200]}\n" if screen_ctx else "")
+            ),
+        }, {
+            "type": "text",
+            "text": fg.get("label") or "Foreground",
+        }, {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        }]
+        msgs = [{"role": "system", "content": VLM_SYSTEM}]
+        if history:
+            msgs.append({"role": "system", "content": "Done so far: " + "; ".join(history)})
+        msgs.append({"role": "user", "content": content})
+        model = _vision_cfg().get("model", "qwen2.5vl:7b")
+        resp = _get_client().chat.completions.create(
+            model=model, messages=msgs, temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        act = json.loads(resp.choices[0].message.content)
+        if act.get("action") == "click":
+            act = _normalize_click(act, scale_meta)
+        return act
+
     shots = sc.capture_all_monitors()
     # Prefer sticky monitor focus when set.
     try:
@@ -351,8 +539,6 @@ def _choose_from_screenshot(goal, history, screen_ctx: str = ""):
         )
         return json.loads(resp.choices[0].message.content)
 
-    max_w = int(_vision_cfg().get("act_max_width", 1280))
-    quality = int(_vision_cfg().get("act_jpeg_quality", 55))
     content = [{
         "type": "text",
         "text": (
@@ -361,7 +547,6 @@ def _choose_from_screenshot(goal, history, screen_ctx: str = ""):
             + (f"Context:\n{screen_ctx[:1200]}\n" if screen_ctx else "")
         ),
     }]
-    scale_meta = []
     for shot in shots:
         mon = shot["monitor"]
         img = shot["image"]
@@ -449,10 +634,11 @@ def computer_use(goal: str, max_steps: int = None) -> str:
         return "My vision system isn't enabled yet."
     cfg = _load_config()
     if max_steps is None:
-        max_steps = int(cfg.get("vision", {}).get("max_steps", 4))
+        max_steps = int(cfg.get("vision", {}).get("max_steps", 6))
 
-    # Fast: structural context + focus hint. Skip VLM until UIA is empty.
-    screen_ctx = quick_screen_context(goal, force_vlm=False)
+    # Include VLM when the goal is visual / deictic.
+    prefer_vision = bool(_NEED_VLM.search(goal or "") or _SCREEN_QA.search(goal or ""))
+    screen_ctx = quick_screen_context(goal, force_vlm=prefer_vision)
     try:
         import monitor_focus
         fl = monitor_focus.status_line()
@@ -464,35 +650,42 @@ def computer_use(goal: str, max_steps: int = None) -> str:
     history = []
     last_say = ""
     prev_act = None
-    prefer_vision = bool(_NEED_VLM.search(goal or ""))
 
     for step in range(max_steps):
         print(f"[vision] step {step + 1}/{max_steps}: capturing elements...", flush=True)
+        # Foreground app first — more accurate for "this window"
         elements = vision.capture_elements(
-            all_monitors=True,
-            max_elements=100,
-            time_budget=4.0,
+            all_monitors=False,
+            max_elements=80,
+            time_budget=3.5,
         )
+        if len(elements) < 5:
+            elements = vision.capture_elements(
+                all_monitors=True,
+                max_elements=100,
+                time_budget=4.0,
+            )
         # Prefer sticky monitor focus when set.
         try:
             import monitor_focus as mf
-            elements = [
-                e for e in elements
-                if e.get("monitor_id") == mf.get_focus() or mf.get_focus() is None
-            ] or elements
+            mid = mf.get_focus()
+            if mid:
+                filtered = [e for e in elements if e.get("monitor_id") == mid]
+                if filtered:
+                    elements = filtered
         except Exception:
             pass
         used_vision = False
         try:
-            # Use VLM when UIA is thin OR user is clearly referring to visuals.
-            use_shot = (not elements) or (prefer_vision and len(elements) < 8)
+            # VLM when UIA is thin OR user is clearly referring to visuals.
+            use_shot = (not elements) or prefer_vision or len(elements) < 6
             if elements and not use_shot:
                 print(f"[vision] {len(elements)} controls found, asking model...", flush=True)
                 Path(__file__).with_name("_last_elements.txt").write_text(
                     vision.elements_as_text(elements), encoding="utf-8")
                 act = _choose_from_elements(goal, elements, history, screen_ctx)
             else:
-                print("[vision] multi-monitor screenshot vision...", flush=True)
+                print("[vision] foreground/screenshot vision...", flush=True)
                 used_vision = True
                 act = _choose_from_screenshot(goal, history, screen_ctx)
         except Exception as exc:

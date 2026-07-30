@@ -70,6 +70,27 @@ async def _startup():
     except Exception as exc:
         print(f"[server] pc_trainer bootstrap failed: {exc}", flush=True)
 
+    # Hands-free: no wake word; remember full PC access.
+    try:
+        import voice_mode
+        voice_mode.bootstrap_hands_free()
+        print(f"[server] voice: {voice_mode.status()}", flush=True)
+    except Exception as exc:
+        print(f"[server] voice_mode bootstrap failed: {exc}", flush=True)
+
+    try:
+        from neuron.memory import store as sql
+        sql.init_db()
+        print("[server] SQLite memory ready", flush=True)
+    except Exception as exc:
+        print(f"[server] sqlite memory failed: {exc}", flush=True)
+
+    try:
+        from neuron.speech import tts_piper
+        print(f"[server] {tts_piper.status()}", flush=True)
+    except Exception as exc:
+        print(f"[server] tts status failed: {exc}", flush=True)
+
 
 async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
     """Execute one command and reply. busy_state is a shared mutable dict."""
@@ -79,6 +100,11 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
     # Stop talking always wins — even mid-task / mid-speech.
     if _is_stop_talk(text):
         busy_state["busy"] = False
+        try:
+            from neuron.speech.tts import stop_speaking
+            stop_speaking()
+        except Exception:
+            pass
         await websocket.send_text(json.dumps({
             "type": "stop_speech",
             "heard": text,
@@ -105,17 +131,38 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
         }))
         return
 
+    # Optional wake-word gate (OFF by default — hands-free).
+    try:
+        import voice_mode
+        if not voice_mode.allow_transcript(text):
+            await websocket.send_text(json.dumps({
+                "type": "response",
+                "heard": text,
+                "text": None,
+                "acted": False,
+            }))
+            return
+    except Exception:
+        pass
+
     busy_state["last_text"] = norm
     busy_state["last_at"] = now
     busy_state["busy"] = True
+    busy_state["barge_sent"] = False
     try:
         reply, acted = await asyncio.to_thread(brain.handle_command, text)
     except Exception as exc:
         reply, acted = f"That failed: {exc}", False
     finally:
         busy_state["busy"] = False
+        busy_state["barge_sent"] = False
 
     if reply == "__STOP_SPEECH__":
+        try:
+            from neuron.speech.tts import stop_speaking
+            stop_speaking()
+        except Exception:
+            pass
         await websocket.send_text(json.dumps({
             "type": "stop_speech",
             "heard": text,
@@ -124,30 +171,98 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
         }))
         return
 
-    await websocket.send_text(json.dumps({
+    # Pending confirm notice
+    try:
+        from neuron.safety import policy
+        pending = policy.get_pending()
+        if pending and reply and "confirm" in (reply or "").lower():
+            await websocket.send_text(json.dumps({
+                "type": "confirm",
+                "heard": text,
+                "action": pending.get("action"),
+                "args": pending.get("args") or {},
+                "reason": pending.get("reason") or reply,
+                "text": reply,
+                "acted": True,
+            }))
+            return
+    except Exception:
+        pass
+
+    # Phase 7 modular TTS (Piper → system SAPI → browser)
+    audio_path = None
+    tts_engine_name = "browser"
+    if reply and acted:
+        try:
+            from neuron.speech.tts import speak as tts_speak
+            spoken = await asyncio.to_thread(tts_speak, reply)
+            tts_engine_name = spoken.engine or "browser"
+            if spoken.path:
+                audio_path = spoken.path
+            # Optional streaming chunks to client
+            if spoken.chunks > 1:
+                await websocket.send_text(json.dumps({
+                    "type": "tts_info",
+                    "chunks": spoken.chunks,
+                    "engine": tts_engine_name,
+                    "interrupted": spoken.interrupted,
+                }))
+        except Exception:
+            try:
+                from neuron.speech import tts_piper
+                spoken = await asyncio.to_thread(tts_piper.speak_to_file, reply)
+                tts_engine_name = spoken.get("engine") or "browser"
+                if tts_engine_name == "piper":
+                    audio_path = spoken.get("path")
+            except Exception:
+                pass
+
+    payload = {
         "type": "response",
         "heard": text,
         "text": reply,
         "acted": acted,
-    }))
+        "tts_engine": tts_engine_name,
+        "speaking": False,
+    }
+    if audio_path:
+        payload["audio_path"] = audio_path
+        try:
+            from pathlib import Path
+            name = Path(audio_path).name
+            payload["audio_url"] = f"/tts_out/{name}"
+        except Exception:
+            pass
+
+    await websocket.send_text(json.dumps(payload))
 
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
-    busy_state = {"busy": False, "last_text": "", "last_at": 0.0}
-    assembler = stt.UtteranceAssembler()
+    busy_state = {"busy": False, "last_text": "", "last_at": 0.0, "barge_sent": False}
     engine = stt.get_engine()
     use_whisper = engine.is_enabled()
+
+    # Phase 6 voice pipeline (VAD → partial ASR → endpoint → gate)
+    try:
+        from neuron.speech.pipeline import VoicePipeline
+        from neuron.speech.session import get_session
+        voice_pipe = VoicePipeline(get_session())
+        assembler = voice_pipe.assembler  # for mute control compat
+    except Exception as exc:
+        print(f"[ws] voice pipeline fallback: {exc}", flush=True)
+        voice_pipe = None
+        assembler = stt.UtteranceAssembler()
 
     await websocket.send_text(json.dumps({
         "type": "stt_status",
         "engine": "whisper" if use_whisper else "browser",
         "backend": engine.backend_name() if use_whisper else "browser",
         "ready": False,
+        "phase": 6,
     }))
 
-    # Tell the client when Whisper finishes loading (may already be warm).
     async def notify_ready():
         try:
             msg = await asyncio.to_thread(engine.warmup)
@@ -157,6 +272,7 @@ async def ws_endpoint(websocket: WebSocket):
                 "engine": "whisper",
                 "backend": engine.backend_name(),
                 "ready": True,
+                "phase": 6,
             }))
         except Exception as exc:
             await websocket.send_text(json.dumps({
@@ -186,8 +302,71 @@ async def ws_endpoint(websocket: WebSocket):
                 pcm_i16 = np.frombuffer(raw, dtype=np.int16)
                 pcm = (pcm_i16.astype(np.float32) / 32768.0)
 
+                if voice_pipe is not None:
+                    events = await asyncio.to_thread(voice_pipe.push_pcm, pcm)
+                    for ev in events:
+                        if ev.kind == "level" and ev.level > 0.08:
+                            # Barge-in: new speech while busy → interrupt TTS (once)
+                            if busy_state["busy"] and ev.level > 0.25 and not busy_state.get("barge_sent"):
+                                busy_state["barge_sent"] = True
+                                try:
+                                    from neuron.speech.session import get_session
+                                    get_session().request_interrupt()
+                                except Exception:
+                                    pass
+                                try:
+                                    from neuron.speech.tts import stop_speaking
+                                    stop_speaking()
+                                except Exception:
+                                    pass
+                                await websocket.send_text(json.dumps({
+                                    "type": "stop_speech",
+                                    "heard": "",
+                                    "text": None,
+                                    "acted": True,
+                                    "barge_in": True,
+                                }))
+                            await websocket.send_text(json.dumps({
+                                "type": "hearing",
+                                "level": round(ev.level, 3),
+                            }))
+                        elif ev.kind == "partial" and ev.text:
+                            await websocket.send_text(json.dumps({
+                                "type": "partial",
+                                "text": ev.text,
+                            }))
+                        elif ev.kind == "wake":
+                            await websocket.send_text(json.dumps({
+                                "type": "wake",
+                                "text": ev.text or "Neuron",
+                                "source": (ev.meta or {}).get("source"),
+                            }))
+                            await websocket.send_text(json.dumps({
+                                "type": "status",
+                                "text": "LISTENING",
+                            }))
+                        elif ev.kind == "rejected":
+                            await websocket.send_text(json.dumps({
+                                "type": "status",
+                                "text": "LISTENING",
+                                "rejected": (ev.meta or {}).get("reason"),
+                                "heard": ev.text or "",
+                            }))
+                        elif ev.kind == "final" and ev.text:
+                            await websocket.send_text(json.dumps({
+                                "type": "status",
+                                "text": "THINKING...",
+                            }))
+                            await websocket.send_text(json.dumps({
+                                "type": "heard",
+                                "text": ev.text,
+                            }))
+                            # Interruptible: stop phrase always handled in _run_command
+                            await _run_command(websocket, ev.text, busy_state)
+                    continue
+
+                # Legacy assembler path
                 level = assembler.level(pcm)
-                # Lightweight hearing cue for the blob (not a transcript yet).
                 if level > 0.08 and not assembler._muted:
                     await websocket.send_text(json.dumps({
                         "type": "hearing",
@@ -231,13 +410,35 @@ async def ws_endpoint(websocket: WebSocket):
 
             if mtype == "control":
                 if "mute" in msg:
-                    assembler.set_muted(bool(msg["mute"]))
+                    if voice_pipe is not None:
+                        voice_pipe.set_muted(bool(msg["mute"]))
+                    else:
+                        assembler.set_muted(bool(msg["mute"]))
+                if msg.get("conversation_mode") is not None:
+                    try:
+                        import voice_mode
+                        reply = voice_mode.set_conversation_mode(bool(msg["conversation_mode"]))
+                        await websocket.send_text(json.dumps({
+                            "type": "response",
+                            "text": reply,
+                            "acted": True,
+                        }))
+                    except Exception:
+                        pass
                 continue
 
             if mtype == "transcript":
-                # Manual / browser-fallback path.
+                # Manual / browser-fallback path (still gate + endpoint clean).
                 text = (msg.get("text") or "").strip()
                 if text:
+                    try:
+                        from neuron.speech.endpoint import is_complete_command
+                        gate = is_complete_command(text)
+                        if not gate.accept:
+                            continue
+                        text = gate.text
+                    except Exception:
+                        pass
                     await _run_command(websocket, text, busy_state)
                 continue
 
@@ -247,7 +448,10 @@ async def ws_endpoint(websocket: WebSocket):
         print(f"[ws] closed: {exc}", flush=True)
 
 
-# Serve index.html, css/, js/ from the project root (mounted last so /ws wins)
+# Serve Piper WAV output + frontend static (mounted last so /ws wins)
+_TTS_DIR = Path(__file__).resolve().parent / "tts_out"
+_TTS_DIR.mkdir(exist_ok=True)
+app.mount("/tts_out", StaticFiles(directory=str(_TTS_DIR)), name="tts_out")
 app.mount("/", StaticFiles(directory=str(ROOT), html=True), name="frontend")
 
 

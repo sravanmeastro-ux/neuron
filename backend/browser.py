@@ -229,6 +229,7 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
         time.sleep(0.35)
 
     # Card-first scan: sort by on-screen position (top→bottom, left→right).
+    # Prefer title links (#video-title-link) — thumbnail <a> often has no title text.
     script = """
     (opts) => {
       const limit = opts.limit || 30;
@@ -238,20 +239,58 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
       const seen = new Set();
       const out = [];
 
+      const cleanTitle = (raw) => {
+        let title = (raw || '').replace(/\\s+/g, ' ').trim();
+        if (!title) return '';
+        // aria-label: "TITLE by CHANNEL 12 minutes 3 seconds 1,234 views"
+        const by = title.search(/\\sby\\s/i);
+        if (by > 0) title = title.slice(0, by).trim();
+        title = title
+          .replace(/\\s*\\d{1,2}:\\d{2}(:\\d{2})?\\s*$/g, '')
+          .replace(/\\s+/g, ' ')
+          .trim();
+        if (/^\\d{1,2}:\\d{2}(:\\d{2})?$/.test(title)) return '';
+        if (title.length < 2) return '';
+        return title.slice(0, 140);
+      };
+
       const pickTitle = (a, item) => {
-        let title = (a.getAttribute('title') || '').trim();
-        if (!title) {
-          title = (a.getAttribute('aria-label') || '').trim();
-          const by = title.search(/\\sby\\s/i);
-          if (by > 0) title = title.slice(0, by).trim();
+        const fromEl = (el) => {
+          if (!el) return '';
+          let t = cleanTitle(el.getAttribute('title') || '');
+          if (t) return t;
+          t = cleanTitle(el.getAttribute('aria-label') || '');
+          if (t) return t;
+          t = cleanTitle(el.textContent || el.innerText || '');
+          return t;
+        };
+        let title = fromEl(a);
+        if (title) return title;
+        if (!item) return '';
+        const sels = [
+          'a#video-title-link',
+          'a#video-title',
+          '#video-title-link',
+          '#video-title',
+          'yt-formatted-string#video-title',
+          '#video-title yt-formatted-string',
+          'a[href*="/watch?v="]#video-title-link',
+          'h3 a[href*="/watch?v="]',
+          'h3 yt-formatted-string',
+          '[id="video-title"]',
+        ];
+        for (const s of sels) {
+          try {
+            title = fromEl(item.querySelector(s));
+            if (title) return title;
+          } catch (e) {}
         }
-        if (!title) title = (a.innerText || '').trim();
-        if (!title && item) {
-          const t = item.querySelector('#video-title, #video-title-link, yt-formatted-string#video-title');
-          if (t) title = (t.getAttribute('title') || t.textContent || '').trim();
-        }
-        if (/^\\d{1,2}:\\d{2}(:\\d{2})?$/.test(title)) title = '';
-        return title.replace(/\\s+/g, ' ').slice(0, 120);
+        // Last resort: any labelled control inside the card
+        try {
+          const labeled = item.querySelector('[title], [aria-label]');
+          title = fromEl(labeled);
+        } catch (e) {}
+        return title || '';
       };
 
       const visibility = (rect) => {
@@ -261,21 +300,26 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
         return (visH * visW) / area;
       };
 
-      // Prefer rich-grid / search result cards (matches human "tiles I see").
+      // Only top-level cards — NOT nested ytd-rich-grid-media (duplicate / no title).
       let items = Array.from(document.querySelectorAll(
-        'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-grid-media'
+        'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer'
       ));
       if (!items.length) {
-        // Fallback: unique watch anchors
-        items = Array.from(document.querySelectorAll('a[href*="/watch?v="]'));
+        items = Array.from(document.querySelectorAll('a#video-title-link, a#video-title'));
       }
 
       const scored = [];
       for (const item of items) {
         try {
-          const a = item.matches && item.matches('a[href*="/watch?v="]')
-            ? item
-            : item.querySelector('a#video-title-link, a#video-title, a[href*="/watch?v="]');
+          // Prefer the TITLE link (has title/aria-label). Thumbnail anchors are often blank.
+          let a = null;
+          if (item.matches && item.matches('a#video-title-link, a#video-title')) {
+            a = item;
+          } else {
+            a = item.querySelector('a#video-title-link, a#video-title')
+              || item.querySelector('h3 a[href*="/watch?v="]')
+              || item.querySelector('a[href*="/watch?v="]');
+          }
           if (!a) continue;
           const href = a.href || '';
           if (!href || href.includes('/shorts/')) continue;
@@ -283,18 +327,17 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
           const id = u.searchParams.get('v');
           if (!id || seen.has(id)) continue;
 
-          const rect = (item.getBoundingClientRect ? item : a).getBoundingClientRect();
-          if (rect.width < 100 || rect.height < 60) continue;
+          const boxEl = (item.getBoundingClientRect && item.tagName && item.tagName.includes('YTD'))
+            ? item : a;
+          const rect = boxEl.getBoundingClientRect();
+          if (rect.width < 80 || rect.height < 40) continue;
           // Skip left rail / mini suggestions
           if (rect.right < 160) continue;
 
           const ratio = visibility(rect);
-          // Mostly on-screen tiles only — drop the half-cut row at the top/bottom
-          // so "2nd video" matches what the user is looking at.
           if (visibleOnly) {
-            if (ratio < 0.72) continue;
-            if (rect.top < -40) continue;
-            if (rect.bottom > vh + 40 && ratio < 0.9) continue;
+            if (ratio < 0.55) continue;
+            if (rect.top < -60) continue;
           } else if (ratio <= 0 && rect.bottom < 0) {
             continue;
           }
@@ -313,7 +356,6 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
       }
 
       scored.sort((a, b) => {
-        // Row grouping: ~80px band so left-to-right within a row wins
         const rowA = Math.round(a.top / 80);
         const rowB = Math.round(b.top / 80);
         if (rowA !== rowB) return rowA - rowB;
@@ -363,7 +405,14 @@ def _collect_watch_videos(page, limit=30, *, visible_only=False, nudge_scroll=Fa
                         continue
                     if href.startswith("/"):
                         href = "https://www.youtube.com" + href
-                    title = (link.get_attribute("title") or link.inner_text() or "").strip()
+                    title = (
+                        link.get_attribute("title")
+                        or link.get_attribute("aria-label")
+                        or link.inner_text()
+                        or ""
+                    ).strip()
+                    if " by " in title.lower():
+                        title = re.split(r"\sby\s", title, maxsplit=1, flags=re.I)[0].strip()
                     seen.add(vid)
                     videos.append({"href": href, "title": title, "id": vid})
                     if len(videos) >= limit:
@@ -395,6 +444,65 @@ def _is_youtube_list(url: str) -> bool:
     if "/watch" in u or "/shorts/" in u:
         return False
     return _is_youtube_home(url) or "/results" in u
+
+
+def _op_list_visible_videos(w):
+    """Count/list videos currently visible on the YouTube page (with titles)."""
+    page = _active_page(w)
+    page.bring_to_front()
+    url = (page.url or "").lower()
+    if "youtube.com" not in url:
+        raise RuntimeError("YouTube isn't open in the controlled browser.")
+    _dismiss_noise(page)
+    videos = _collect_watch_videos(page, limit=24, visible_only=True, nudge_scroll=False)
+    if not videos:
+        time.sleep(0.6)
+        videos = _collect_watch_videos(page, limit=24, visible_only=True, nudge_scroll=False)
+    if not videos:
+        raise RuntimeError("I don't see any video tiles on the YouTube page right now.")
+
+    # If titles are still blank, one Playwright pass on title links only.
+    if sum(1 for v in videos if (v.get("title") or "").strip()) < max(1, len(videos) // 2):
+        try:
+            enriched = page.evaluate(
+                """(ids) => {
+                  const map = {};
+                  for (const a of document.querySelectorAll(
+                    'a#video-title-link, a#video-title, h3 a[href*="/watch?v="]'
+                  )) {
+                    try {
+                      const u = new URL(a.href);
+                      const id = u.searchParams.get('v');
+                      if (!id || !ids.includes(id)) continue;
+                      let t = (a.getAttribute('title') || a.getAttribute('aria-label')
+                               || a.textContent || '').trim();
+                      const by = t.search(/\\sby\\s/i);
+                      if (by > 0) t = t.slice(0, by).trim();
+                      t = t.replace(/\\s+/g, ' ').slice(0, 140);
+                      if (t) map[id] = t;
+                    } catch (e) {}
+                  }
+                  return map;
+                }""",
+                [v["id"] for v in videos],
+            ) or {}
+            for v in videos:
+                if not (v.get("title") or "").strip() and v["id"] in enriched:
+                    v["title"] = enriched[v["id"]]
+        except Exception:
+            pass
+
+    n = len(videos)
+    lines = []
+    for i, v in enumerate(videos, 1):
+        title = (v.get("title") or "").strip() or f"video {v.get('id', i)}"
+        lines.append(f"{i}) {title}")
+    spoken = f"I can see {n} video{'s' if n != 1 else ''} on screen: " + "; ".join(lines[:8])
+    if n > 8:
+        spoken += f"; and {n - 8} more."
+    else:
+        spoken += "."
+    return spoken
 
 
 def _op_play_result(w, index, force_home=False):
@@ -437,7 +545,8 @@ def _op_play_result(w, index, force_home=False):
         raise RuntimeError("I don't see any videos on this YouTube page yet")
     if index < 1 or index > len(videos):
         titles = "; ".join(
-            (v.get("title") or "untitled")[:40] for v in videos[:6]
+            ((v.get("title") or "").strip() or f"id:{v.get('id', '?')}")[:50]
+            for v in videos[:6]
         )
         raise RuntimeError(
             f"I only see {len(videos)} video(s) on screen — asked for #{index}. "
@@ -1085,6 +1194,11 @@ def youtube_home_play(index: int) -> str:
 def play_by_title(title: str) -> str:
     """Play a visible YouTube video by spoken/on-screen title (not by number)."""
     return _get().submit(_op_play_by_title, title or "")
+
+
+def list_visible_videos() -> str:
+    """Say how many YouTube videos are on screen and list their titles."""
+    return _get().submit(_op_list_visible_videos)
 
 
 def skip_ad() -> str:

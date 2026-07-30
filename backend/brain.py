@@ -7,6 +7,7 @@ Returns reply=None when the sentence doesn't match any command
 
 import json
 import re
+from pathlib import Path
 
 import actions
 import app_learner
@@ -29,6 +30,17 @@ except Exception:
 
 # Per-turn multi-screen glance (mode 1B: before almost every command).
 _LAST_SCREEN_CTX = ""
+
+
+def _agent_config() -> dict:
+    """Phase 1 agent settings from config.json (overridable in tests)."""
+    try:
+        return (
+            json.loads(Path(__file__).resolve().parent.joinpath("config.json").read_text(encoding="utf-8")).get("agent")
+            or {}
+        )
+    except Exception:
+        return {}
 
 
 def _refresh_screen_glance(text: str, *, force_vlm: bool = False) -> str:
@@ -163,6 +175,12 @@ def _clean(text: str) -> str:
 
 
 def handle_command(raw: str):
+    """NEURON command entry.
+
+    Phase 1 brain (default): context → intent → planner → tools → executor →
+    verifier → replan. Escape hatches only for confirm / wake / stop / monitor focus.
+    Legacy regex routes remain as fallback when the agent cannot plan (Ollama down).
+    """
     # NLU: turn casual / messy speech into a short simple intent first.
     _nlu = nlu.understand(raw)
     text = _nlu["canonical"] or _nlu["cleaned"]
@@ -171,6 +189,72 @@ def handle_command(raw: str):
     if not text:
         return None, False
 
+    agent_attempted = False
+
+    # ---- confirm pending high-risk tool ------------------------------
+    if re.fullmatch(r"(?:please )?(?:confirm|yes|do it|proceed|go ahead)(?: please)?", text):
+        try:
+            from neuron.safety import confirm as confirm_mod
+            from neuron.brain import executor
+            pending = confirm_mod.take_pending()
+            if pending:
+                plan = {"say": "", "steps": [{"action": pending["action"], "args": dict(pending.get("args") or {})}]}
+                # Mark confirmed for policy
+                plan["steps"][0]["args"]["confirmed"] = True
+                er = executor.execute_plan(plan, confirmed=True)
+                if er.errors:
+                    return "I hit a problem: " + "; ".join(er.errors), True
+                return (er.outcomes[-1] if er.outcomes else "Done."), True
+            return "Nothing waiting for confirmation.", True
+        except Exception as exc:
+            return f"Confirm failed: {exc}", True
+    if re.fullmatch(r"(?:please )?(?:cancel|abort|never ?mind|no)(?: please)?", text):
+        try:
+            from neuron.safety import confirm as confirm_mod
+            if confirm_mod.take_pending():
+                return "Cancelled.", True
+        except Exception:
+            pass
+
+    # ---- hands-free / wake word preferences --------------------------
+    if re.search(
+        r"\b(hands[\s-]?free(?: mode)?|don'?t (?:require|need) (?:my |a )?name|"
+        r"no wake(?: word)?|you don'?t need (?:me to say )?(?:neuron|your name)|"
+        r"stop (?:making me )?say (?:neuron|your name)|just listen|"
+        r"you have (?:full )?access(?: to (?:my )?(?:pc|computer|laptop))?)\b",
+        text,
+    ) and not re.search(r"\b(require|need|enable|turn on)\b.+\b(wake|name|neuron)\b", text):
+        import voice_mode
+        memory.remember(
+            "pc access",
+            "full desktop control granted; act on plain speech without waiting to be named",
+        )
+        return voice_mode.set_wake_word_required(False), True
+    if re.search(
+        r"\b(require (?:a )?wake(?: word)?|wake word on|"
+        r"only (?:listen|respond|act) (?:when|if) I say (?:your name|neuron)|"
+        r"make me say (?:neuron|your name))\b",
+        text,
+    ):
+        import voice_mode
+        return voice_mode.set_wake_word_required(True), True
+
+    # ---- conversation mode (Phase 6) ---------------------------------
+    if re.search(
+        r"\b(conversation mode|chat mode|keep listening|stay listening|"
+        r"don'?t (?:make me )?say (?:neuron|your name) (?:each|every|again))\b",
+        text,
+    ) and not re.search(r"\b(end|stop|exit|leave)\b.+\bconversation\b", text):
+        import voice_mode
+        return voice_mode.set_conversation_mode(True), True
+    if re.search(
+        r"\b(end conversation|stop conversation|exit conversation|"
+        r"leave conversation mode|conversation mode off)\b",
+        text,
+    ):
+        import voice_mode
+        return voice_mode.set_conversation_mode(False), True
+
     # ---- stop talking (TTS barge-in) ---------------------------------
     if re.search(
         r"\b(stop talking|stop speaking|be quiet|shut up|silence|stop\s+neuron)\b",
@@ -178,24 +262,34 @@ def handle_command(raw: str):
     ):
         return "__STOP_SPEECH__", True
 
-    # ---- monitor focus: look at / use monitor N ---------------------
+    # ---- monitor focus: look at / use screen|monitor N / left|right|main ----
     m_focus = re.search(
         r"\b(?:look at|see|watch|use|focus on|listen to|work on)\s+"
-        r"(?:my\s+|the\s+)?monitor\s*(one|two|1|2|first|second)\b"
-        r"|\bmonitor\s*(one|two|1|2|first|second)\b",
+        r"(?:my\s+|the\s+)?"
+        r"(?:"
+        r"(?:left|right|main|other|primary|secondary)\s+(?:screen|monitor|display)"
+        r"|(?:screen|monitor|display)\s*(?:number\s*)?(one|two|three|four|five|first|second|third|\d{1,2})"
+        r")"
+        r"\b"
+        r"|\b(?:screen|monitor|display)\s*(?:number\s*)?(one|two|three|four|five|first|second|third|\d{1,2})\b",
         text,
     )
     if m_focus:
         import monitor_focus
-        word = (m_focus.group(1) or m_focus.group(2) or "1").lower()
-        mid = 1 if word in ("1", "one", "first") else 2
-        # Set focus, then briefly describe THAT monitor only.
+        from neuron.windows import monitors as mon_mod
+        phrase = m_focus.group(0)
+        mon = mon_mod.resolve_monitor_ref(phrase)
+        if not mon:
+            # Legacy fallback one/two
+            word = (m_focus.group(1) or m_focus.group(2) or "1").lower()
+            mid = 1 if word in ("1", "one", "first") else 2
+        else:
+            mid = int(mon["id"])
         monitor_focus.set_focus(mid)
         if vision_agent and vision_agent.is_enabled():
             desc = vision_agent.describe_screens(
                 f"monitor {mid} only", monitor_id=mid
             )
-            # Keep spoken reply short; focus stickiness does the rest.
             short = (desc or "").replace("\n", " ")
             if len(short) > 220:
                 short = short[:200].rsplit(" ", 1)[0] + "."
@@ -217,15 +311,50 @@ def handle_command(raw: str):
     # VLM when the user refers to on-screen stuff).
     _refresh_screen_glance(text)
 
-    # ---- multi-screen describe (see + understand) --------------------
-    if vision_agent and vision_agent.is_enabled() and re.search(
-        r"\bwhat(?:'s| is|s) on (?:my |the )?(?:screen|screens|monitor|monitors|display|displays)\b"
-        r"|\bdescribe (?:my |the )?(?:screen|screens|monitor|monitors|desktop|display)s?\b"
-        r"|\blook at (?:my |the )?(?:screen|screens|monitor|monitors)\b"
-        r"|\bcan you see (?:my |the )?(?:screen|screens|desktop)\b",
-        text,
+    # ---- Phase 1 agent-first brain -----------------------------------
+    _acfg = _agent_config()
+    if _acfg.get("enabled", True) and _acfg.get("agent_first", True):
+        try:
+            from neuron.brain import agent as neuron_agent
+            say, acted, meta = neuron_agent.run(
+                raw,
+                use_rules_fallback=bool(_acfg.get("legacy_fallback", True)),
+                screen_ctx=_LAST_SCREEN_CTX or "",
+            )
+            agent_attempted = True
+            if meta.get("path") == "rules_fallback" or (say is None and not acted):
+                print("[agent] planner unavailable -> legacy rules", flush=True)
+            else:
+                return (say or None), acted
+        except Exception as exc:
+            print(f"[agent] agent-first error -> legacy: {exc}", flush=True)
+
+    # ---- multi-screen / any-app vision Q&A ---------------------------
+    # YouTube tile count uses DOM (precise). Everything else uses active-app vision.
+    if vision_agent and vision_agent.is_enabled() and (
+        re.search(
+            r"\bwhat(?:'s| is|s) on (?:my |the )?(?:screen|screens|monitor|monitors|display|displays)\b"
+            r"|\bdescribe (?:my |the )?(?:screen|screens|monitor|monitors|desktop|display|window|app)s?\b"
+            r"|\blook at (?:my |the )?(?:screen|screens|monitor|monitors)\b"
+            r"|\bcan you see (?:my |the )?(?:screen|screens|desktop)\b"
+            r"|\b(how many|what|which|list|count)\b.+\b(on (?:my |the )?screen|can you see|do you see)\b"
+            r"|\b(can you|do you) see\b.+\b(on|in|there)\b"
+            r"|\bwhat(?:'s| is) (?:that|this)\b",
+            text,
+        )
+        or (hasattr(vision_agent, "_SCREEN_QA") and vision_agent._SCREEN_QA.search(text))
     ):
-        return vision_agent.describe_screens(text), True
+        # Precise YouTube feed listing when controlled browser is on YouTube.
+        yt_video_q = bool(re.search(r"\bvideos?\b", text)) and not re.search(
+            r"\b(play|open|click|select|start)\b", text
+        )
+        if _BROWSER and yt_video_q:
+            try:
+                if browser.on_youtube():
+                    return browser.list_visible_videos(), True
+            except Exception:
+                pass
+        return vision_agent.answer_screen(text), True
 
     # ---- general vision computer-use (any app / any monitor) ---------
     m = re.match(
@@ -259,8 +388,16 @@ def handle_command(raw: str):
         text,
     ):
         import pc_trainer
-        deep = not re.search(r"\b(quick|fast|inventory only|just (scan|map|inventory))\b", text)
-        return pc_trainer.start_training(deep_learn=deep), True
+        # "learn my computer" / deep / thoroughly → full inventory + deep UI on priority apps
+        deep = bool(re.search(
+            r"\b(deep|thorough|fully|deep.?learn|every|all|whole|entire|perfect|"
+            r"complete|learn (?:every|all|my) (?:app|computer|pc|os|system))\b",
+            text,
+        )) and not re.search(r"\b(quick|fast|inventory only)\b", text)
+        # Default for plain "learn my computer" is now FULL (user expectation).
+        if re.search(r"\b(computer|pc|laptop|system|machine|os)\b", text):
+            deep = not re.search(r"\b(quick|fast|inventory only)\b", text)
+        return pc_trainer.start_training(deep_learn=deep, deep_limit=40, force_refresh=deep), True
 
     if re.search(
         r"\b(training status|learn(?:ing)? status|what have you learned"
@@ -273,6 +410,137 @@ def handle_command(raw: str):
     if re.search(r"\b(stop|cancel) (training|learning|pc (scan|map))\b", text):
         import pc_trainer
         return pc_trainer.stop_training(), True
+
+    # Priority playbooks: Discord, YouTube, Google, Opera, Settings, Steam, Blender, Notepad, WhatsApp
+    if re.search(
+        r"\btrain (?:the )?(?:priority|main|important) apps\b"
+        r"|\btrain (?:neuron )?(?:on )?(?:discord|youtube|google|opera|steam|blender|notepad|whatsapp)\b"
+        r"|\blearn (?:how to use )?(?:discord|youtube|google|opera|windows settings|steam|blender|notepad|whatsapp)"
+        r"(?: and|,| )+(?:discord|youtube|google|opera|settings|steam|blender|notepad|whatsapp)\b"
+        r"|\bteach (?:yourself|neuron) (?:these|those|priority) apps\b",
+        text,
+    ):
+        import priority_apps
+        # Live UI scan can open windows — user explicitly asked to train.
+        return priority_apps.train_live(), True
+
+    # Learn workflows from Google / YouTube tutorials (not only mouse recording)
+    if re.search(
+        r"\b(ask google|from youtube|from google|learn from|train from|"
+        r"watch(?: a)?(?: youtube)?(?: video)?|search (?:google|youtube) for how)\b",
+        text,
+    ) or (
+        re.search(r"\b(learn|train|teach)\b.+\bhow to\b", text)
+        and re.search(r"\b(youtube|google|tutorial|internet|online|web)\b", text)
+    ):
+        import howto_learn
+        reply = howto_learn.learn_from_utterance(text)
+        if reply:
+            return reply, True
+
+    # Stop / disable the old "learn every focused window" spam.
+    if re.search(
+        r"\b(stop|disable|turn off|don'?t)\b.+\b(auto\s*learn|learning every|watching (apps|windows))\b"
+        r"|\bstop (watching|scanning) (apps|windows|every app)\b",
+        text,
+    ):
+        try:
+            import json as _json
+            from pathlib import Path as _P
+            path = _P(__file__).resolve().parent / "config.json"
+            cfg = _json.loads(path.read_text(encoding="utf-8"))
+            al = cfg.setdefault("auto_learn", {})
+            al["watch_foreground"] = False
+            al["learn_on_open"] = False
+            path.write_text(_json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+        return (
+            "Okay — I won't scan apps as you open them. "
+            "Say 'learn my computer' to map installed apps, or 'learn how X works' for one app."
+        ), True
+
+    # ---- Windows Settings (ms-settings URIs) -------------------------
+    if (
+        re.search(
+            r"\bwindows settings\b"
+            r"|\b(bluetooth|wi-?fi|display|sound|personalization|windows update|"
+            r"notifications)\s+settings?\b"
+            r"|\bopen (?:the )?(?:settings|setting)\b"
+            r"|\bgo to (?:the )?settings\b",
+            text,
+        )
+        and not re.search(
+            r"\b(steam|blender|discord|chrome|opera|whatsapp|youtube|spotify)\b",
+            text,
+        )
+    ):
+        page = "home"
+        for name in (
+            "bluetooth", "wifi", "wi-fi", "display", "sound", "notifications",
+            "personalization", "network", "apps", "privacy", "accounts",
+            "update", "storage", "gaming", "system",
+        ):
+            if re.search(rf"\b{re.escape(name)}\b", text):
+                page = "wifi" if name == "wi-fi" else name
+                break
+        if re.search(r"\bwindows update\b", text):
+            page = "update"
+        return actions.open_settings(page), True
+
+    # ---- click workflow recorder (optional; NEVER always-on) ---------
+    import click_recorder
+    if re.search(
+        r"\b(start|begin)\b.+\b(recording?|record)\b.+\b(clicks?|mouse|workflow|this)\b"
+        r"|\b(start|begin) recording(?: clicks?| my clicks?| this)?\b"
+        r"|\brecord (?:my )?(?:clicks?|this workflow|a workflow)\b"
+        r"|\bwatch (?:my|these) clicks?\b",
+        text,
+    ):
+        return click_recorder.start(), True
+    if re.search(
+        r"\b(stop|finish|end|save) recording\b"
+        r"|\bsave (?:the |this )?(?:recording|clicks?|workflow)\b",
+        text,
+    ):
+        # Optional name: "stop recording as open friends"
+        m_name = re.search(
+            r"(?:as|named|called)\s+(.+)$",
+            text,
+        )
+        name = m_name.group(1).strip() if m_name else ""
+        return click_recorder.stop(name), True
+    if re.fullmatch(r"(?:cancel|abort) recording", text):
+        return click_recorder.cancel(), True
+    if re.search(r"\b(list|show) (?:my )?(?:click|mouse) (?:recipes?|recordings?|workflows?)\b", text):
+        return click_recorder.list_recipes(), True
+    if re.search(r"\b(recording status|am i recording|click recorder status)\b", text):
+        return click_recorder.status(), True
+    if re.search(
+        r"\b(replay|play back|playback)\b.+\b(clicks?|recording|recipe|workflow)\b"
+        r"|\b(replay|play back)\s+(?:my\s+)?(?:saved\s+)?(?:clicks?|recording|recipe|workflow)\b"
+        r"|\breplay\s+[\w][\w\s\-]{1,40}$",
+        text,
+    ) and not re.search(r"\b(video|youtube|yt|song|track|music)\b", text):
+        m = re.search(
+            r"\b(?:replay|play back)\s+(?:the\s+)?(?:recording|recipe|workflow|clicks?)?\s*(.*)$",
+            text,
+        )
+        q = (m.group(1).strip() if m else "") or text
+        q = re.sub(r"^(?:the\s+)?(?:recording|recipe|workflow|clicks?)\s*", "", q).strip()
+        return click_recorder.replay(query=q or text), True
+
+    # If user says "remember that as X" while/after recording, save clicks under that name.
+    if click_recorder.is_recording() and re.match(
+        r"(?:remember (?:that|this) as|save that as|call that|when i say)\s+(.+)$",
+        text,
+    ):
+        phrase = re.match(
+            r"(?:remember (?:that|this) as|save that as|call that|when i say)\s+(.+)$",
+            text,
+        ).group(1).strip()
+        phrase = re.sub(r"\s*(?:do that|and do that|please)$", "", phrase).strip()
+        return click_recorder.stop(phrase), True
 
     # ---- learn / read a single app -----------------------------------
     # "learn/analyze/study how steam works", "read this app"
@@ -319,6 +587,91 @@ def handle_command(raw: str):
 
     if re.match(r"what do you know about (.+)", text):
         return app_learner.recall_summary(re.match(r"what do you know about (.+)", text).group(1)), True
+
+    # ---- teach / remember voice recipes ------------------------------
+    # Only alias teaching — NEVER steal "remember that my favorite color is red".
+    import voice_recipes
+    m_rem = re.match(
+        r"(?:remember (?:that|this) as|save that as|call that|when i say)\s+(.+)$",
+        text,
+    )
+    if m_rem:
+        phrase = m_rem.group(1).strip()
+        phrase = re.sub(r"\s*(?:do that|and do that|please)$", "", phrase).strip()
+        if phrase:
+            return voice_recipes.remember_last_as(phrase), True
+    if re.fullmatch(
+        r"(?:please )?(?:remember that|save that|learn that command|remember this command)"
+        r"(?: please)?",
+        text,
+    ):
+        last = voice_recipes.last_success()
+        if last.get("phrase") and last.get("action"):
+            return voice_recipes.remember(
+                last["phrase"], last["action"], last.get("args") or {}
+            ), True
+        return (
+            "Do the action once, then say 'remember that as open friends chat' "
+            "(or whatever phrase you want)."
+        ), True
+
+    # Known voice recipes (friends chat, discord, taught phrases, …)
+    recipe = voice_recipes.match(text)
+    if recipe:
+        action = recipe.get("action") or ""
+        args = recipe.get("args") or {}
+        try:
+            if action == "discord_friends":
+                msg = actions.discord_friends()
+            elif action == "youtube_home":
+                msg = browser.youtube_home() if _BROWSER else "Browser control isn't available."
+            elif action == "open_settings":
+                msg = actions.open_settings(args.get("page", "home") or "home")
+            elif action == "replay_clicks":
+                msg = click_recorder.replay(
+                    recipe_id=args.get("id", "") or "",
+                    query=args.get("say", "") or text,
+                )
+            elif action == "steam_goto":
+                msg = actions.steam_goto(args.get("section", "friends"))
+            elif action == "open_app":
+                msg = actions.open_app(args.get("name", "") or recipe.get("app", ""))
+            elif action == "open_website":
+                msg = _web_open(args.get("site", ""), args.get("browser", ""))
+            elif action == "search_site":
+                msg = _web_search(
+                    args.get("site", ""), args.get("query", ""), args.get("browser", "")
+                )
+            elif action == "computer_use" and vision_agent and vision_agent.is_enabled():
+                msg = vision_agent.computer_use(args.get("goal") or text)
+            elif action in _EXECUTORS:
+                msg = _EXECUTORS[action](args)
+            else:
+                msg = None
+            if msg is not None:
+                voice_recipes.note_success(text, action, args, say=str(msg))
+                voice_recipes.auto_save_if_useful(text, action, args)
+                return str(msg), True
+        except Exception as exc:
+            # Fall through to Steam / open / vision rather than hard-fail
+            print(f"[voice_recipes] {action} failed: {exc}", flush=True)
+
+    # Bare "open friends chat" / "friends chat" without recipe hit
+    if re.search(
+        r"\b(open |go to |show )?(the )?(friends?(?: and)? chat|friend chat|dms|direct messages)\b",
+        text,
+    ) and not re.search(r"\bsteam\b", text):
+        try:
+            msg = actions.discord_friends()
+            voice_recipes.note_success(text, "discord_friends", {})
+            voice_recipes.auto_save_if_useful("open friends chat", "discord_friends", {})
+            return msg, True
+        except Exception as exc:
+            if vision_agent and vision_agent.is_enabled():
+                return vision_agent.computer_use(
+                    "Open Discord Friends / DMs chat list"
+                ), True
+            return f"Couldn't open Friends chat: {exc}", True
 
     # ---- Steam desktop client (NEVER the web browser / Windows Search) ----
     if re.search(r"\bsteam\b", text) and not re.search(
@@ -416,6 +769,21 @@ def handle_command(raw: str):
         if re.search(r"\b(captions|subtitles)\b", text):
             return browser.player_key("c"), True
 
+    # ---- list / count videos on screen (NOT play) -------------------
+    # "how many videos can you see" must never become play_result.
+    if _BROWSER and re.search(
+        r"\b(how many|count|list|what|which|name)\b.+\bvideos?\b"
+        r"|\bvideos?\b.+\b(can you see|do you see|on (?:my |the )?screen|visible|right now)\b"
+        r"|\b(see|saw|seeing)\b.+\bvideos?\b.+\b(screen|youtube|there)\b",
+        text,
+    ) and not re.search(r"\b(play|open|click|select|start)\b", text):
+        try:
+            import app_context
+            app_context.set_app("youtube")
+        except Exception:
+            pass
+        return browser.list_visible_videos(), True
+
     # ---- act inside the page: "play the 2nd video / result" ----------
     # Default = Nth video CURRENTLY VISIBLE on screen (after scroll counts).
     # Only force homepage navigation when they explicitly say homepage/home feed
@@ -425,21 +793,28 @@ def handle_command(raw: str):
         r"visible|showing|in\s+(?:my\s+|the\s+)?view)\b",
         text,
     ))
-    m = re.match(
-        r"(?:play|open|click|select|watch|start)(?: the)? "
-        r"(\d+|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd)"
-        r"(?:st|nd|rd|th)? (?:video|result|one|link|song|item)"
-        r"(?:\s+(?:on|in|from|that|i|which)\b.*)?$",
+    # Questions about videos are never play commands.
+    _ask_about_videos = bool(re.search(
+        r"\b(how many|what|which|list|count|tell me)\b",
         text,
-    )
-    if not m:
-        # Loose: "play second video on screen" / "play 2nd video i can see"
-        m = re.search(
-            r"\b(?:play|open|click|select|watch|start)\b.+\b"
-            r"(\d+|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
-            r"1st|2nd|3rd|4th|5th)\b.+\b(?:video|result|one)\b",
+    ))
+    m = None
+    if not _ask_about_videos:
+        m = re.match(
+            r"(?:play|open|click|select|watch|start)(?: the)? "
+            r"(\d+|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd)"
+            r"(?:st|nd|rd|th)? (?:video|result|one|link|song|item)"
+            r"(?:\s+(?:on|in|from|that|i|which)\b.*)?$",
             text,
         )
+        if not m:
+            # Loose: "play second video on screen" / "play 2nd video i can see"
+            m = re.search(
+                r"\b(?:play|open|click|select|watch|start)\b.+\b"
+                r"(\d+|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
+                r"1st|2nd|3rd|4th|5th)\b.+\b(?:video|result|one)\b",
+                text,
+            )
     if m:
         n = _parse_ordinal(m.group(1))
         if n and _BROWSER:
@@ -455,9 +830,10 @@ def handle_command(raw: str):
             return "Browser control isn't available right now.", True
 
     # Fuzzy speech: "...second video...youtube..." even when words are jumbled.
-    # Do NOT fire this for skip-ad / "not this video" / complaints.
+    # Do NOT fire this for skip-ad / "not this video" / complaints / questions.
     if (
         _BROWSER
+        and not _ask_about_videos
         and re.search(r"\b(video|videos)\b", text)
         and (
             re.search(r"\b(youtube|yt)\b", text)
@@ -635,7 +1011,7 @@ def handle_command(raw: str):
         # Command-like phrases must NOT hit Windows Search via open_app —
         # hand them to the reasoning brain / computer_use instead.
         if actions._looks_like_command_phrase(target_key) or len(target_key.split()) > 3:
-            if brain_llm.is_enabled():
+            if not agent_attempted and brain_llm.is_enabled():
                 result = _run_with_llm(raw, normalized=text)
                 if result is not None:
                     return result
@@ -896,8 +1272,8 @@ def handle_command(raw: str):
         return stt.get_engine().status_report(), True
 
     # ---- LLM reasoning fallback: handle ANYTHING else ----------------
-    if brain_llm.is_enabled():
-        # Prefer normalized intent; keep original words for the model.
+    # Skip if Phase 1 agent already tried (avoids a second Ollama round-trip).
+    if not agent_attempted and brain_llm.is_enabled():
         result = _run_with_llm(raw, normalized=text)
         if result is not None:
             return result
@@ -910,14 +1286,24 @@ def handle_command(raw: str):
 # Web actions go through _web_open/_web_search so they land in the SAME
 # controlled browser that play_result / click_text act on.
 _EXECUTORS = {
-    "open_app": lambda a: actions.open_app(a.get("name", "")),
+    "open_app": lambda a: actions.open_app(
+        (a.get("name") or a.get("application") or a.get("app") or "")
+    ),
     "steam_goto": lambda a: actions.steam_goto(a.get("section", "library")),
+    "discord_friends": lambda a: actions.discord_friends(),
+    "open_settings": lambda a: actions.open_settings(a.get("page", "home") or "home"),
+    "replay_clicks": lambda a: __import__("click_recorder").replay(
+        recipe_id=a.get("id", "") or "",
+        query=a.get("say", "") or a.get("name", "") or "",
+    ),
     "steam_select_account": lambda a: actions.steam_select_account(
         int(a.get("index", 1) or 1), a.get("name", "") or ""
     ),
     "learn_app": lambda a: app_learner.learn_app(a.get("name", "") or a.get("target", "") or "this"),
     "train_pc": lambda a: __import__("pc_trainer").start_training(
-        deep_learn=bool(a.get("deep_learn", True))
+        deep_learn=bool(a.get("deep_learn", True)),
+        deep_limit=int(a.get("deep_limit", 40) or 40),
+        force_refresh=bool(a.get("force_refresh", False) or a.get("force", False)),
     ),
     "training_status": lambda a: __import__("pc_trainer").status_report(),
     "stop_training": lambda a: __import__("pc_trainer").stop_training(),
@@ -942,7 +1328,7 @@ _EXECUTORS = {
     "close_app": lambda a: actions.close_app(a.get("name", "") or a.get("app", "")),
     "screenshot": lambda a: actions.screenshot(all_monitors=bool(a.get("all") or a.get("all_monitors"))),
     "describe_screen": lambda a: (
-        vision_agent.describe_screens(a.get("request", "") or a.get("goal", ""))
+        vision_agent.answer_screen(a.get("request", "") or a.get("goal", ""))
         if vision_agent and vision_agent.is_enabled()
         else "Vision isn't ready yet."
     ),
@@ -962,6 +1348,9 @@ _EXECUTORS = {
     "play_by_title": lambda a: (
         browser.play_by_title(a.get("title", "") or a.get("query", "") or a.get("name", ""))
         if _BROWSER else "Browser control isn't available."
+    ),
+    "list_visible_videos": lambda a: (
+        browser.list_visible_videos() if _BROWSER else "Browser control isn't available."
     ),
     "skip_ad": lambda a: browser.skip_ad() if _BROWSER else "Browser control isn't available.",
     "fullscreen": lambda a: (
@@ -983,10 +1372,25 @@ _EXECUTORS = {
     "create_folder": lambda a: actions.create_folder(a.get("name", ""), a.get("location", "desktop")),
     "create_file": lambda a: actions.create_file(a.get("name", ""), a.get("content", ""), a.get("location", "desktop")),
     "open_folder": lambda a: actions.open_folder(a.get("location", "")),
-    "run_shell": lambda a: actions.run_shell(a.get("command", "")),
+    "run_shell": lambda a: _safe_run_shell(a),
     "wait": lambda a: actions.wait(a.get("seconds", 1)),
     "system_report": lambda a: actions.system_report(),
 }
+
+
+def _safe_run_shell(a: dict) -> str:
+    """Gate legacy run_shell through safety policy."""
+    cmd = a.get("command", "")
+    try:
+        from neuron.safety import policy
+        ok, reason = policy.allow("run_shell", {"command": cmd}, confirmed=bool(a.get("confirmed")))
+        if not ok:
+            from neuron.safety import confirm as confirm_mod
+            confirm_mod.request_confirm("run_shell", {"command": cmd}, reason)
+            return reason
+    except Exception:
+        return "Shell blocked (safety module unavailable)."
+    return actions.run_shell(cmd)
 
 
 def _execute_plan(result):
@@ -1013,12 +1417,25 @@ def _execute_plan(result):
 
 
 def _run_with_llm(raw: str, normalized: str = ""):
-    """Ask the reasoning core for a plan, execute it, and self-correct once
-    if a step fails — like a human noticing and retrying differently."""
+    """Plan via Ollama; execute through neuron tool registry + verify/replan."""
     intent = (normalized or "").strip() or nlu.best_text(raw)
-    context = memory.context_blob(intent or raw)
-    # Mode 1B: attach live multi-monitor glance so the planner knows what's on screen.
     screen_ctx = _LAST_SCREEN_CTX or _refresh_screen_glance(intent or raw)
+    memory.log("user", raw)
+    try:
+        from neuron.brain import agent as neuron_agent
+        from neuron.brain import tool_registry
+        tool_registry.ensure_bootstrapped()
+        say, acted = neuron_agent.run_legacy_llm(
+            raw, normalized=intent, screen_ctx=screen_ctx or ""
+        )
+        if say is not None:
+            if say:
+                memory.log("neuron", say)
+            return (say or None, acted)
+    except Exception as exc:
+        print(f"[agent] fallback to legacy executor: {exc}", flush=True)
+
+    context = memory.context_blob(intent or raw)
     if screen_ctx:
         blob = screen_ctx
         if len(blob) > 2200:
@@ -1030,8 +1447,6 @@ def _run_with_llm(raw: str, normalized: str = ""):
 
     steps = result.get("steps", []) or []
     outcomes, errors, unknown, failed_step = _execute_plan(result)
-
-    # Self-correction: report the exact failure back to the model, once.
     if errors and failed_step is not None:
         fix_context = (
             context
@@ -1039,7 +1454,6 @@ def _run_with_llm(raw: str, normalized: str = ""):
             + f"\nFailed action: {json.dumps(failed_step)}"
             + f"\nError: {errors[-1]}"
             + "\nGive corrected steps that avoid this error (different action or args)."
-            + " If it truly cannot be done, return empty steps and explain in say."
         )
         retry = brain_llm.plan(raw, fix_context, normalized=intent)
         if retry is not None and (retry.get("steps") or []):
@@ -1050,23 +1464,17 @@ def _run_with_llm(raw: str, normalized: str = ""):
                 result = retry
 
     say = (result.get("say") or "").strip()
-
-    # Honesty: if a step actually failed, say so instead of faking success.
     if errors:
         say = "I hit a problem: " + "; ".join(errors)
     elif unknown and not outcomes:
         say = f"I didn't know how to run: {', '.join(unknown)}."
     elif outcomes:
-        # Prefer reporting what actually happened over the model's guess.
         say = outcomes[-1]
     elif not steps:
-        # Pure conversation — keep the model's spoken reply.
         pass
     else:
-        # Steps were listed but none produced a result — don't fake success.
         say = say or "I planned it, but nothing actually ran."
 
-    memory.log("user", raw)
     if say:
         memory.log("neuron", say)
     return (say or None, bool(steps or say))

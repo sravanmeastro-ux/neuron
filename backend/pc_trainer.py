@@ -145,7 +145,7 @@ def _resolve_lnk(path: Path) -> tuple[str, str]:
     return path.stem, ""
 
 
-def scan_apps(limit: int = 250) -> list[dict]:
+def scan_apps(limit: int = 400) -> list[dict]:
     """Discover installed apps from Start Menu shortcuts + App Paths registry."""
     found: dict[str, dict] = {}
 
@@ -282,7 +282,10 @@ def _write_inventory_stub(app: dict):
             {"say": f"launch {alias}", "do": f"open_app {alias}"},
             {"say": f"close {alias}", "do": f"close_app {alias}"},
         ],
-        "notes": "From PC inventory. Deep UI learn happens when the app is opened/focused.",
+        "notes": (
+            "From PC inventory. Launch with open_app. "
+            "For deep UI control say 'learn how this app works', or use computer_use."
+        ),
         "exe": app.get("exe") or "",
         "inventory_only": True,
         "auto": True,
@@ -353,37 +356,94 @@ def inventory_for_prompt(hint: str = "") -> str:
     return "\n".join(lines)
 
 
-def _priority_apps(apps: list[dict]) -> list[dict]:
-    """Apps worth deep-learning first (common daily tools)."""
+def _priority_apps(apps: list[dict], limit: int = 40) -> list[dict]:
+    """Apps worth deep-learning first (daily tools + creative/dev on this PC)."""
     priority_keys = (
-        "steam", "chrome", "edge", "firefox", "spotify", "discord", "slack",
+        "steam", "chrome", "edge", "firefox", "brave", "spotify", "discord", "slack",
         "code", "cursor", "notepad", "word", "excel", "powerpoint", "outlook",
-        "whatsapp", "telegram", "obs", "vlc", "photoshop", "figma", "notion",
-        "explorer", "calculator", "paint", "terminal", "cmd",
+        "whatsapp", "telegram", "obs", "vlc", "photoshop", "premiere", "after effects",
+        "illustrator", "figma", "notion", "explorer", "calculator", "paint",
+        "terminal", "cmd", "powershell", "windows terminal", "snipping",
+        "settings", "task manager", "control panel", "file explorer",
+        "adobe", "blender", "unity", "unreal", "davinci", "audacity",
+        "zoom", "teams", "github", "docker", "postman", "android studio",
     )
     ranked = []
     for a in apps:
         alias = (a.get("alias") or "").lower()
+        name = (a.get("name") or "").lower()
+        blob = f"{alias} {name}"
         score = 0
         for i, key in enumerate(priority_keys):
-            if key in alias:
-                score = 100 - i
+            if key in blob:
+                score = 200 - i
                 break
+        # Prefer apps with a real exe path
+        if score and a.get("exe"):
+            score += 5
         if score:
             ranked.append((score, a))
     ranked.sort(key=lambda x: -x[0])
     seen = set()
     out = []
     for _, a in ranked:
-        al = a.get("alias")
-        if al in seen:
+        al = (a.get("alias") or "").lower()
+        # Dedupe close aliases (adobe premiere vs adobe premiere pro)
+        stem = re.sub(r"\d{4}$", "", al).strip()
+        if al in seen or stem in seen:
             continue
         seen.add(al)
+        seen.add(stem)
         out.append(a)
-    return out[:20]
+        if len(out) >= limit:
+            break
+    return out
 
 
-def _deep_learn_worker(apps: list[dict]):
+def _write_os_knowledge():
+    """Built-in Windows OS how-to so NEURON can drive the OS without scanning every window."""
+    APP_MEMORY.mkdir(exist_ok=True)
+    path = APP_MEMORY / "windows-os.json"
+    data = {
+        "name": "Windows OS",
+        "kind": "operating_system",
+        "summary": (
+            "Windows desktop OS. Use built-in actions for system control; "
+            "computer_use for unfamiliar UI; open_app for installed programs from PC inventory."
+        ),
+        "preferred_action": "computer_use",
+        "voice_commands": [
+            {"say": "open settings", "do": "open_app settings"},
+            {"say": "show desktop", "do": "window desktop"},
+            {"say": "switch window", "do": "window switch"},
+            {"say": "close window", "do": "window close"},
+            {"say": "minimize window", "do": "window minimize"},
+            {"say": "maximize window", "do": "window maximize"},
+            {"say": "take a screenshot", "do": "screenshot"},
+            {"say": "lock my computer", "do": "press_keys win l"},
+            {"say": "open task manager", "do": "press_keys control shift escape"},
+            {"say": "open file explorer", "do": "open_app explorer"},
+            {"say": "open downloads", "do": "open_folder downloads"},
+            {"say": "open documents", "do": "open_folder documents"},
+            {"say": "open desktop folder", "do": "open_folder desktop"},
+            {"say": "volume up", "do": "volume up"},
+            {"say": "mute", "do": "volume mute"},
+        ],
+        "notes": (
+            "OS control primitives: window/volume/media/screenshot/open_folder/open_app/"
+            "press_keys/computer_use/describe_screen. "
+            "Installed apps come from pc_inventory.json — use short alias with open_app. "
+            "Do not dump English phrases into Windows Search."
+        ),
+        "updated": datetime.now().isoformat(timespec="seconds"),
+        "slug": "windows-os",
+        "builtin": True,
+    }
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return path
+
+
+def _deep_learn_worker(apps: list[dict], *, force: bool = False):
     import app_learner
     with _lock:
         _state["queued"] = len(apps)
@@ -395,16 +455,17 @@ def _deep_learn_worker(apps: list[dict]):
             _state["queued"] = max(0, _state["queued"] - 1)
         alias = app.get("alias") or app.get("name") or ""
         try:
-            if app_learner._fresh_enough(alias, hours=72):
+            if not force and app_learner._fresh_enough(alias, hours=72):
+                print(f"[pc_trainer] skip (fresh): {alias}", flush=True)
                 continue
             print(f"[pc_trainer] deep-learning {alias}…", flush=True)
             msg = app_learner.learn_app(
-                alias, auto=True, open_if_needed=True, force=False
+                alias, auto=True, open_if_needed=True, force=force
             )
             print(f"[pc_trainer] {msg}", flush=True)
             with _lock:
                 _state["learned"] += 1
-            time.sleep(4.0)
+            time.sleep(3.0)
         except Exception as exc:
             with _lock:
                 _state["last_error"] = str(exc)
@@ -417,7 +478,7 @@ def _deep_learn_worker(apps: list[dict]):
     print("[pc_trainer] background training finished", flush=True)
 
 
-def start_training(*, deep_learn: bool = True) -> str:
+def start_training(*, deep_learn: bool = True, deep_limit: int = 40, force_refresh: bool = False) -> str:
     """Kick off inventory (+ optional deep learn). Non-blocking spoken reply."""
     with _lock:
         if _state["running"]:
@@ -437,14 +498,19 @@ def start_training(*, deep_learn: bool = True) -> str:
     def worker():
         try:
             print("[pc_trainer] scanning apps + folders…", flush=True)
-            apps = scan_apps()
+            apps = scan_apps(limit=400)
             folders = scan_folders()
             save_inventory({
                 "apps": apps,
                 "folders": folders,
                 "deep_learn": deep_learn,
+                "deep_limit": deep_limit if deep_learn else 0,
             })
             register_apps_with_actions(apps)
+            try:
+                _write_os_knowledge()
+            except Exception as exc:
+                print(f"[pc_trainer] OS knowledge write failed: {exc}", flush=True)
             for app in apps:
                 try:
                     _write_inventory_stub(app)
@@ -459,8 +525,13 @@ def start_training(*, deep_learn: bool = True) -> str:
                 flush=True,
             )
             if deep_learn:
-                pri = _priority_apps(apps)
-                _deep_learn_worker(pri)
+                pri = _priority_apps(apps, limit=max(10, int(deep_limit)))
+                print(
+                    f"[pc_trainer] deep-learning {len(pri)} priority apps "
+                    f"(opens each briefly — leave the PC alone if you can)…",
+                    flush=True,
+                )
+                _deep_learn_worker(pri, force=force_refresh)
             else:
                 with _lock:
                     _state["running"] = False
@@ -474,10 +545,15 @@ def start_training(*, deep_learn: bool = True) -> str:
             print(f"[pc_trainer] failed: {exc}", flush=True)
 
     threading.Thread(target=worker, daemon=True, name="pc-trainer").start()
+    if deep_learn:
+        return (
+            f"On it. Full PC map: every installed app and folder, Windows OS recipes, "
+            f"then deep UI learn for up to {deep_limit} priority apps in the background. "
+            "Apps may open briefly — say 'training status' anytime, 'stop training' to halt."
+        )
     return (
-        "On it. I'll map every app and important folder on this PC in the background — "
-        "it takes a while. Meanwhile you can keep talking to me; say 'training status' "
-        "anytime. After that I'll handle opens and workflows much more efficiently."
+        "On it. Quiet scan — I'll inventory installed apps and folders only "
+        "(no UI reading of every window). Say 'training status' when you want an update."
     )
 
 
@@ -491,16 +567,32 @@ def stop_training() -> str:
 
 
 def bootstrap_on_startup():
-    """Load existing inventory aliases into open_app at server boot."""
+    """Load inventory aliases; if none yet, quietly scan installed apps once."""
     data = load_inventory()
-    if not data:
+    if data:
+        try:
+            register_apps_with_actions(data.get("apps") or [])
+            n = len(data.get("apps") or [])
+            print(
+                f"[pc_trainer] loaded inventory "
+                f"({n} apps) — open_app knows this PC",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"[pc_trainer] bootstrap failed: {exc}", flush=True)
         return
+
+    # First boot: inventory only (no deep UI scan of every focused app).
     try:
-        register_apps_with_actions(data.get("apps") or [])
-        print(
-            f"[pc_trainer] loaded inventory "
-            f"({len(data.get('apps') or [])} apps, {len(data.get('folders') or [])} folders)",
-            flush=True,
-        )
+        cfg = {}
+        try:
+            cfg = json.loads(
+                Path(__file__).resolve().parent.joinpath("config.json").read_text(encoding="utf-8")
+            ).get("auto_learn", {}) or {}
+        except Exception:
+            pass
+        if cfg.get("bootstrap_inventory", True):
+            print("[pc_trainer] no inventory yet — scanning installed apps (quiet)…", flush=True)
+            start_training(deep_learn=False)
     except Exception as exc:
         print(f"[pc_trainer] bootstrap failed: {exc}", flush=True)

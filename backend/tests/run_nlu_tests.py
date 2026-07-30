@@ -22,6 +22,7 @@ CASES = [
     ("open google chrome", "open chrome"),
     ("hey neuron open chrome", "open chrome"),
     ("start chrome", "open chrome"),
+    ("start recording clicks", "start recording clicks"),
     ("quit chrome", "close chrome"),
     ("exit chrome", "close chrome"),
     # STT

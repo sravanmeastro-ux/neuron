@@ -30,6 +30,11 @@ def get_app() -> str:
     return _STATE["app"]
 
 
+def current_app() -> str:
+    """Alias used by context gather / perception."""
+    return get_app()
+
+
 def clear() -> None:
     _STATE["app"] = ""
     _STATE["until"] = 0.0

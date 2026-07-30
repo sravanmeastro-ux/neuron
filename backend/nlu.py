@@ -77,7 +77,8 @@ NORMALIZERS: list[tuple[str, str]] = [
     # "open up chrome" → open chrome (tiny grammar, still normal)
     (r"^(open|close)\s+up\s+(.+)$", r"\1 \2"),
     # "start chrome" / "launch chrome" → open chrome (common normal verbs)
-    (r"^(start|launch)\s+(.+)$", r"open \2"),
+    # Do NOT rewrite "start recording …" / "start watching …"
+    (r"^(start|launch)\s+(?!recording\b|watching\b|listen(?:ing)?\b)(.+)$", r"open \2"),
     # "quit/exit chrome" already handled by close rule; normalize to close
     (r"^(quit|exit)\s+(?!fullscreen\b)(.+)$", r"close \2"),
     # Gerund speech: "playing the second video…" → play …

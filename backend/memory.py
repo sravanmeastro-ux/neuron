@@ -1,7 +1,7 @@
-"""N.E.U.R.O.N long-term memory — simple persistent JSON store.
+"""N.E.U.R.O.N long-term memory — JSON + SQLite (Phase 5).
 
-Keeps facts/preferences across sessions and a rolling recent-history log,
-so the assistant remembers you without re-explaining every time.
+Keeps facts/preferences across sessions and a rolling recent-history log.
+SQLite is primary for facts/history/tool_runs; JSON remains compatible mirror.
 """
 
 import json
@@ -27,9 +27,21 @@ def remember(key: str, value: str) -> None:
     data = _load()
     data.setdefault("facts", {})[key.lower().strip()] = value.strip()
     _save(data)
+    try:
+        from neuron.memory import store as sql
+        sql.remember(key, value)
+    except Exception:
+        pass
 
 
 def recall(key: str):
+    try:
+        from neuron.memory import store as sql
+        val = sql.recall(key)
+        if val is not None:
+            return val
+    except Exception:
+        pass
     return _load().get("facts", {}).get(key.lower().strip())
 
 
@@ -39,16 +51,40 @@ def log(role: str, text: str) -> None:
     hist.append({"t": datetime.now().isoformat(timespec="seconds"), "role": role, "text": text})
     data["history"] = hist[-MAX_HISTORY:]
     _save(data)
+    try:
+        from neuron.memory import store as sql
+        sql.ensure()
+        conn = sql._conn()
+        conn.execute(
+            "INSERT INTO history(t,role,text) VALUES(?,?,?)",
+            (datetime.now().isoformat(timespec="seconds"), role, text),
+        )
+        conn.execute(
+            "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT 40)"
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 
 def context_blob(request: str = "") -> str:
     """Compact context string handed to the LLM each request."""
     data = _load()
     facts = data.get("facts", {})
+    try:
+        from neuron.memory import store as sql
+        sql.ensure()
+        conn = sql._conn()
+        rows = conn.execute("SELECT key, value FROM facts LIMIT 12").fetchall()
+        conn.close()
+        if rows:
+            facts = {r["key"]: r["value"] for r in rows}
+    except Exception:
+        pass
     lines = []
     if facts:
         lines.append("Known facts:")
-        # Cap facts to keep planner fast.
         for i, (k, v) in enumerate(facts.items()):
             if i >= 12:
                 break
@@ -76,9 +112,35 @@ def context_blob(request: str = "") -> str:
     except Exception:
         pass
     try:
+        import voice_recipes
+        recipes = voice_recipes.for_prompt(18)
+        if recipes:
+            if len(recipes) > 900:
+                recipes = recipes[:900] + "\n…"
+            lines.append(recipes)
+    except Exception:
+        pass
+    try:
+        import priority_apps
+        pmap = priority_apps.for_prompt(request)
+        if pmap:
+            if len(pmap) > 700:
+                pmap = pmap[:700] + "\n…"
+            lines.append(pmap)
+    except Exception:
+        pass
+    try:
+        from neuron.memory.store import recent_tool_runs
+        runs = recent_tool_runs(4)
+        if runs:
+            lines.append("Recent tool runs:\n" + "\n".join(runs))
+    except Exception:
+        pass
+    try:
         import skills
         if request and any(w in request.lower() for w in (
-            "youtube", "steam", "scroll", "fullscreen", "skip", "learn", "folder",
+            "youtube", "steam", "discord", "friends", "scroll", "fullscreen",
+            "skip", "learn", "folder", "settings", "whatsapp", "blender", "opera",
         )):
             lines.append("Prefer SKILL RECIPES for this request.")
     except Exception:
