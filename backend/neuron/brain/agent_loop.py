@@ -1,15 +1,8 @@
 """Central AgentLoop — reliable closed-loop desktop agent execution.
 
-USER COMMAND
-  → understand goal
-  → observe computer
-  → create plan
-  → execute ONE step
-  → observe computer again
-  → verify expected_result
-  → continue if successful
-  → retry / replan if unsuccessful
-  → finish only after verifying the final goal
+V3.7 adaptive loop:
+  OBSERVE → UNDERSTAND → PLAN → SAFETY CHECK → ACT → VERIFY
+  on failure: diagnose → observe → retry / alternate / replan / ask user
 
 This is a thin public facade over Phase 9 OPAVR (`run_opavr`).
 Existing callers via neuron.brain.agent.run / brain.handle_command are unchanged.

@@ -32,10 +32,10 @@
     "compute_type": "float16",
     "language": "en",
     "beam_size": 1,
-    "speech_rms": 0.012,
-    "silence_rms": 0.006,
-    "silence_ms": 550,
-    "min_speech_ms": 320,
+    "speech_rms": 0.009,
+    "silence_rms": 0.0045,
+    "silence_ms": 480,
+    "min_speech_ms": 280,
     "max_speech_ms": 12000,
     "pre_roll_ms": 220,
     "hangover_ms": 180,
@@ -58,8 +58,8 @@
     "enabled": true,
     "max_steps": 40,
     "poll_seconds": 0.05,
-    "store_pixels": true,
-    "_comment": "OFF until you say 'start recording clicks'. Captures your mouse clicks (UIA + coords) into replayable recipes. Never always-on spyware."
+    "store_pixels": false,
+    "_comment": "OFF until you say 'start recording clicks'. Captures UIA names into semantic recipes — never passwords/pixels by default (V3.8)."
   },
   "assistant": {
     "name": "NEURON",
@@ -74,7 +74,13 @@
     "openwakeword_enabled": false,
     "openwakeword_threshold": 0.5,
     "openwakeword_models": ["hey_jarvis"],
-    "_comment": "Hands-free by default. Set wake_word_required true + optional openwakeword_enabled for 'Neuron.' then command. Conversation mode skips wake until timeout."
+    "media_gate_enabled": true,
+    "media_peak_threshold": 0.18,
+    "media_loud_hold_ms": 500,
+    "media_quiet_release_ms": 1500,
+    "media_require_wake": true,
+    "media_speech_rms_scale": 1.0,
+    "_comment": "When speakers are loud, reject YouTube dialogue and require 'Neuron' for most commands — but short safe ones (scroll down, mute, skip ad) still work. media_speech_rms_scale=1.0 keeps your voice audible (raising it made NEURON miss you)."
   },
   "tts": {
     "enabled": true,
@@ -92,6 +98,16 @@
     "enabled": true,
     "agent_first": true,
     "legacy_fallback": true,
+    "capability_router": true,
+    "context_engine": true,
+    "reference_resolver": true,
+    "perception_engine": true,
+    "tool_registry_v35": true,
+    "grounded_planner": true,
+    "adaptive_agent_loop": true,
+    "multi_monitor_v38": true,
+    "multi_app_planner": true,
+    "semantic_skills": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -102,6 +118,6 @@
     "ocr_verify": "auto",
     "context_high_confidence": 0.75,
     "context_medium_confidence": 0.45,
-    "_comment": "Closed-loop AgentLoop: observe→plan→act ONE step→verify→retry/replan→final goal check. screen_verify/ocr_verify=auto|always|off — UIA first, local RapidOCR when text expectations need it."
+    "_comment": "V3.8 multi-monitor + multi-app + semantic skills. Prior: adaptive AgentLoop (V3.7), CapabilityRouter, ContextEngine, ReferenceResolver, PerceptionEngine, ToolRegistry, GroundedPlanner."
   }
 }

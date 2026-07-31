@@ -80,19 +80,31 @@ def normalize_step(step: Any) -> dict | None:
         or ""
     )
     name = str(name).strip()
-    # Allow youtube_search → youtube.search when dotted skill exists
-    if name and "." not in name and "_" in name:
-        dotted = name.replace("_", ".", 1)
-        # Only rewrite known domain prefixes
-        if dotted.split(".", 1)[0] in (
-            "youtube", "browser", "windows", "spotify", "discord", "files", "blender",
-        ):
-            try:
-                from neuron.brain import tool_registry
-                if tool_registry.get(dotted):
-                    name = dotted
-            except Exception:
-                pass
+    # Resolve dotted ↔ underscore skill aliases without forcing dotted form.
+    # If the caller wrote browser_search and both forms are registered, keep
+    # browser_search (matches plans, expect_actions, and executor logs).
+    if name:
+        try:
+            from neuron.brain import tool_registry
+            tool_registry.ensure_bootstrapped()
+            if "." in name:
+                unders = name.replace(".", "_", 1)
+                prefix = name.split(".", 1)[0]
+                if prefix in (
+                    "youtube", "browser", "windows", "spotify", "discord", "files", "blender",
+                ):
+                    if not tool_registry.get(name) and tool_registry.get(unders):
+                        name = unders
+            elif "_" in name:
+                dotted = name.replace("_", ".", 1)
+                prefix = dotted.split(".", 1)[0]
+                if prefix in (
+                    "youtube", "browser", "windows", "spotify", "discord", "files", "blender",
+                ):
+                    if not tool_registry.get(name) and tool_registry.get(dotted):
+                        name = dotted
+        except Exception:
+            pass
     if not name:
         return None
     args = step.get("arguments") or step.get("args") or step.get("params") or {}

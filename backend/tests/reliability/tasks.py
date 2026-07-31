@@ -1,4 +1,4 @@
-"""Reliability benchmark task catalog (~100 real desktop workflows).
+"""Reliability benchmark task catalog (V3.9: 150+ desktop workflows).
 
 Prefer a tight set of high-reliability workflows over thousands of fragile commands.
 Each task has: id, request, optional fixed plan, expect_actions, category, tags.
@@ -985,6 +985,13 @@ def build_tasks() -> list[dict[str, Any]]:
         ),
     ]
     tasks.extend(extras)
+
+    # V3.9 expansion (multi-monitor, multi-app, context, skills, failures, …)
+    try:
+        from tests.reliability.tasks_v39 import build_v39_tasks
+    except ImportError:
+        from reliability.tasks_v39 import build_v39_tasks  # type: ignore
+    tasks.extend(build_v39_tasks())
 
     # Deduplicate by id while keeping order
     seen = set()

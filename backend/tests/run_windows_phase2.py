@@ -112,6 +112,7 @@ def test_executor_toolresult_failure():
         "_test_fail_tool",
         lambda a: fail("nope"),
         description="test",
+        risk="safe",
         overwrite=True,
     )
     er = executor.execute_plan({"steps": [{"action": "_test_fail_tool", "args": {}}]})

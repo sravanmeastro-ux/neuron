@@ -1,6 +1,99 @@
 {
   "procedures": [
     {
+      "id": "web.enter_secret",
+      "domain": "web",
+      "name": "enter_secret",
+      "say": [
+        "enter token"
+      ],
+      "steps": [
+        {
+          "action": "type_text",
+          "args": {
+            "text": "[redacted]",
+            "name": "API Token"
+          },
+          "target": "",
+          "expected_result": ""
+        }
+      ],
+      "builtin": false,
+      "source": "demonstration",
+      "semantic": true,
+      "created": "2026-07-30T21:04:22",
+      "meta": {
+        "sanitize_warnings": []
+      }
+    },
+    {
+      "id": "notepad.open_file_menu",
+      "domain": "notepad",
+      "name": "open_file_menu",
+      "say": [
+        "open file menu in notepad"
+      ],
+      "steps": [
+        {
+          "action": "open_app",
+          "args": {
+            "name": "notepad"
+          },
+          "target": "notepad",
+          "expected_result": "notepad is focused"
+        },
+        {
+          "action": "wait",
+          "args": {
+            "seconds": 1.5
+          },
+          "target": "settle",
+          "expected_result": "UI settled"
+        },
+        {
+          "action": "click_element",
+          "args": {
+            "name": "File"
+          },
+          "target": "File",
+          "expected_result": "clicked File"
+        },
+        {
+          "action": "wait",
+          "args": {
+            "seconds": 0.4
+          },
+          "target": "between clicks",
+          "expected_result": "ready for next step"
+        },
+        {
+          "action": "click_element",
+          "args": {
+            "name": "Edit"
+          },
+          "target": "Edit",
+          "expected_result": "clicked Edit"
+        },
+        {
+          "action": "wait",
+          "args": {
+            "seconds": 0.4
+          },
+          "target": "between clicks",
+          "expected_result": "ready for next step"
+        }
+      ],
+      "builtin": false,
+      "source": "test",
+      "semantic": true,
+      "created": "2026-07-30T21:49:29",
+      "meta": {
+        "sanitize_warnings": [
+          "dropped non-adaptive coordinate step (click)"
+        ]
+      }
+    },
+    {
       "id": "notepad.type_hello",
       "domain": "notepad",
       "name": "type_hello",
@@ -28,8 +121,11 @@
       ],
       "builtin": false,
       "source": "test",
-      "created": "2026-07-30T12:24:47",
-      "meta": {}
+      "semantic": true,
+      "created": "2026-07-30T21:49:35",
+      "meta": {
+        "sanitize_warnings": []
+      }
     },
     {
       "id": "blender.new_project",
@@ -63,12 +159,14 @@
       ],
       "builtin": false,
       "source": "demonstration",
-      "created": "2026-07-30T12:24:47",
+      "semantic": true,
+      "created": "2026-07-30T21:49:36",
       "meta": {
         "click_recipe_id": "",
-        "goal": "create a new Blender project"
+        "goal": "create a new Blender project",
+        "sanitize_warnings": []
       }
     }
   ],
-  "updated": "2026-07-30T12:24:47"
+  "updated": "2026-07-30T21:49:36"
 }

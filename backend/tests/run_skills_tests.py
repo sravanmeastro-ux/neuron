@@ -68,15 +68,21 @@ def test_files_find_empty():
     print("OK files validation")
 
 
-def test_normalize_underscore_to_dotted():
+def test_normalize_skill_aliases_preserve_registered_form():
+    """When both dotted and underscore are registered, keep the caller's form."""
     from neuron.brain import tool_registry
     from neuron.brain.normalize import normalize_step
     tool_registry.reset_for_tests()
     import brain  # noqa
     tool_registry.ensure_bootstrapped()
     step = normalize_step({"tool": "youtube_search", "arguments": {"query": "x"}})
-    assert step["action"] == "youtube.search"
-    print("OK normalize alias")
+    assert step["action"] == "youtube_search"
+    step2 = normalize_step({"tool": "youtube.search", "arguments": {"query": "x"}})
+    assert step2["action"] == "youtube.search"
+    # Both resolve to a callable tool
+    assert tool_registry.get("youtube_search") is not None
+    assert tool_registry.get("youtube.search") is not None
+    print("OK normalize alias preserves registered form")
 
 
 def test_executor_runs_skill():
@@ -107,7 +113,7 @@ if __name__ == "__main__":
     test_youtube_search_validation()
     test_windows_move_validation()
     test_files_find_empty()
-    test_normalize_underscore_to_dotted()
+    test_normalize_skill_aliases_preserve_registered_form()
     test_executor_runs_skill()
     test_skill_prompt()
     print("ALL skill tests passed")

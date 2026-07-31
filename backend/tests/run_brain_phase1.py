@@ -72,7 +72,7 @@ def test_intent_and_deterministic_agent():
         ex.return_value = er
         say, acted, meta = agent.run("open notepad", use_rules_fallback=False)
         assert acted
-        assert meta["path"] in ("deterministic", "recipe")
+        assert meta["path"] in ("deterministic", "recipe", "capability")
         call_plan = ex.call_args[0][0]
         assert call_plan["steps"][0]["action"] == "open_app"
         print("OK deterministic agent", meta["path"], say)

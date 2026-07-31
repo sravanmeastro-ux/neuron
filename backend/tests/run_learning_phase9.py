@@ -77,13 +77,43 @@ def test_clicks_to_steps():
         "app": "blender",
         "steps": [
             {"button": "left", "x": 10, "y": 20, "element": {"name": "General"}},
-            {"button": "left", "x": 30, "y": 40, "element": {"name": ""}},
+            {"button": "left", "x": 30, "y": 40, "element": {"name": ""}},  # coord-only → dropped
         ],
     }
     steps = clicks_to_steps(recipe)
     assert steps[0]["action"] == "open_app"
     assert any(s.get("action") == "click_element" and s["args"].get("name") == "General" for s in steps)
+    assert not any(s.get("action") == "click" for s in steps), "raw coordinates must not be saved"
     print("OK clicks_to_steps", len(steps))
+
+
+def test_refuse_password_and_coords():
+    from neuron.learning.procedures import save_procedure
+    ok, msg, _ = save_procedure(
+        skill_id="web.login",
+        steps=[{"action": "type_text", "args": {"text": "password=hunter2", "name": "Password"}}],
+        say=["login"],
+    )
+    assert not ok, msg
+    ok2, msg2, p = save_procedure(
+        skill_id="desktop.coord_click",
+        steps=[{"action": "click", "args": {"x": 100, "y": 200}}],
+        say=["click there"],
+    )
+    assert not ok2
+    assert "semantic" in msg2.lower() or "coordinate" in msg2.lower() or "usable" in msg2.lower()
+    print("OK refuse password/coords")
+
+
+def test_blender_start_render_builtin():
+    from neuron.learning.procedures import match, skill_id_from_goal
+    assert skill_id_from_goal("start blender render") == "blender.start_render"
+    hit = match("start blender render")
+    assert hit and hit.get("id") == "blender.start_render"
+    assert hit.get("semantic") or all(
+        s.get("action") != "click" for s in (hit.get("steps") or [])
+    )
+    print("OK blender.start_render builtin")
 
 
 def test_brain_learn_how_i():
@@ -105,6 +135,7 @@ def test_registry_has_procedure():
     tool_registry.ensure_bootstrapped()
     assert tool_registry.get("run_procedure")
     assert tool_registry.get("blender.new_project")
+    assert tool_registry.get("blender.start_render")
     print("OK registry procedure tools")
 
 
@@ -115,6 +146,8 @@ if __name__ == "__main__":
     test_save_and_match_learned()
     test_teach_parse_and_session()
     test_clicks_to_steps()
+    test_refuse_password_and_coords()
+    test_blender_start_render_builtin()
     test_brain_learn_how_i()
     test_registry_has_procedure()
     print("ALL Phase 9 learning tests passed")

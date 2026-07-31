@@ -703,43 +703,139 @@ def diagnose_failure(
     error: str,
     world: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Inspect current state and return a likely cause for logging / recover."""
+    """Inspect current state and return a structured failure diagnosis.
+
+    V3.7: includes `category` (ELEMENT_NOT_FOUND, APP_NOT_RUNNING, …)
+    and a suggested recovery `strategy`. Legacy `cause` is preserved.
+    """
     world = world or observe_world(
         str(step.get("target") or (step.get("args") or {}).get("name") or "")
     )
     action = (step.get("action") or "").strip()
+    args = step.get("args") if isinstance(step.get("args"), dict) else {}
     err = (error or "").lower()
+    target = str(step.get("target") or args.get("name") or args.get("text") or "")
     cause = "unknown"
+    category = "UNKNOWN"
+    ask_prompt = ""
     detail = error or "verification failed"
 
-    if "timeout" in err or "timed out" in err:
-        cause = "timeout"
-    elif "not running" in err or "no window" in err:
-        cause = "app_not_present"
-    elif "not found" in err or "no match" in err or "couldn't find" in err:
-        cause = "target_not_found"
-    elif "confirm" in err:
-        cause = "needs_confirm"
-    elif "blocked" in err:
-        cause = "policy_blocked"
-    elif "url" in err or "expected youtube" in err:
-        cause = "browser_state_mismatch"
+    # --- classify (order matters: specific before broad) ---
+    if "interrupted" in err or "stopped by user" in err or "cancel requested" in err:
+        cause, category = "interrupted", "INTERRUPTED"
+    elif "timeout" in err or "timed out" in err or "deadline exceeded" in err:
+        cause, category = "timeout", "ACTION_TIMEOUT"
+    elif (
+        "confirmation required" in err
+        or "needs confirm" in err
+        or "permission required" in err
+        or "permission denied" in err
+        or "access denied" in err
+        or "say confirm" in err
+        or err.strip().startswith("confirm")
+        or " requires confirmation" in err
+    ):
+        cause, category = "needs_confirm", "PERMISSION_REQUIRED"
+        ask_prompt = "Say confirm to proceed, or cancel."
+    elif (
+        "policy" in err and ("block" in err or "deny" in err or "reject" in err)
+    ) or "not allowed" in err or "safety blocked" in err or "risk blocked" in err:
+        cause, category = "policy_blocked", "POLICY_BLOCKED"
+    elif "ambiguous" in err or "which one" in err or "which window" in err or "multiple matches" in err:
+        cause, category = "ambiguous", "AMBIGUOUS_TARGET"
+        ask_prompt = detail if "which" in err else "Which one did you mean?"
+    elif (
+        "popup" in err
+        or "modal" in err
+        or "dialog" in err
+        or "cookie" in err
+        or "consent" in err
+        or "overlay blocking" in err
+    ):
+        cause, category = "popup", "POPUP_DETECTED"
+    elif "wrong monitor" in err or (
+        "monitor" in err and ("expected" in err or "not on" in err or "mismatch" in err)
+    ):
+        cause, category = "monitor_mismatch", "WRONG_MONITOR"
+    elif "wrong window" in err or "foreground mismatch" in err:
+        cause, category = "wrong_window", "WRONG_WINDOW"
+    elif "focus lost" in err or "not focused" in err or "lost focus" in err or "no focus" in err:
+        cause, category = "focus", "FOCUS_LOST"
+    elif "not running" in err or (
+        "no window" in err and action in ("open_app", "focus_app", "close_app", "launch_app")
+    ):
+        cause, category = "app_not_present", "APP_NOT_RUNNING"
+    elif "no window" in err or "window not found" in err or "window missing" in err:
+        cause, category = "window_missing", "WINDOW_NOT_FOUND"
+    elif (
+        "not found" in err
+        or "no match" in err
+        or "couldn't find" in err
+        or "could not find" in err
+        or "click missed" in err
+        or "element missing" in err
+        or "no such element" in err
+    ):
+        cause, category = "target_not_found", "ELEMENT_NOT_FOUND"
+    elif (
+        ("page" in err and ("load" in err or "blank" in err or "not ready" in err))
+        or "expected youtube" in err
+        or ("url" in err and ("mismatch" in err or "wrong" in err or "expected" in err))
+        or "page not loaded" in err
+        or "document not ready" in err
+    ):
+        cause, category = "browser_state_mismatch", "PAGE_NOT_LOADED"
     elif "monitor" in err:
-        cause = "monitor_mismatch"
-    elif action in ("open_app", "focus_app"):
-        check = _check_app(str((step.get("args") or {}).get("name") or step.get("target") or ""))
+        cause, category = "monitor_mismatch", "WRONG_MONITOR"
+    elif "verification failed" in err or "verify failed" in err or "did not verify" in err:
+        cause, category = "verification_failed", "VERIFICATION_FAILED"
+    elif action in ("open_app", "focus_app", "launch_app"):
+        check = _check_app(str(args.get("name") or target or ""))
         if not (check.get("window_exists") or check.get("process_running")):
-            cause = "app_not_present"
-            detail = f"{detail}; process={check.get('process_running')} window={check.get('window_exists')}"
+            cause, category = "app_not_present", "APP_NOT_RUNNING"
+            detail = (
+                f"{detail}; process={check.get('process_running')} "
+                f"window={check.get('window_exists')}"
+            )
+        else:
+            cause, category = "verification_failed", "VERIFICATION_FAILED"
     elif not world.get("window") and not world.get("app"):
-        cause = "no_foreground_context"
+        cause, category = "no_foreground_context", "FOCUS_LOST"
+    else:
+        # Heuristic world checks
+        want = (args.get("name") or target or "").strip().lower()
+        got_app = str(world.get("app") or "").lower()
+        got_win = str(world.get("window") or "").lower()
+        if want and got_app and want not in got_app and want not in got_win:
+            if action in ("focus_app", "type_text", "click_element", "click_ui_element"):
+                cause, category = "wrong_window", "WRONG_WINDOW"
+            else:
+                cause, category = "verification_failed", "VERIFICATION_FAILED"
+        else:
+            cause, category = "verification_failed", "VERIFICATION_FAILED"
+
+    # Suggested strategy (refined by decide_recovery in the loop)
+    strategy = "alternate"
+    if category in ("PERMISSION_REQUIRED", "AMBIGUOUS_TARGET"):
+        strategy = "ask_user"
+    elif category == "POLICY_BLOCKED":
+        strategy = "blocked"
+    elif category in ("ACTION_TIMEOUT", "PAGE_NOT_LOADED", "POPUP_DETECTED", "FOCUS_LOST"):
+        strategy = "retry"
+    elif category == "INTERRUPTED":
+        strategy = "fail"
+    elif category == "VERIFICATION_FAILED":
+        strategy = "replan"
 
     return {
         "cause": cause,
+        "category": category,
         "detail": str(detail)[:400],
         "action": action,
-        "target": step.get("target") or (step.get("args") or {}).get("name") or "",
+        "target": target,
         "expected_result": step.get("expected_result") or "",
+        "strategy": strategy,
+        "ask_prompt": ask_prompt,
         "world": {k: world.get(k) for k in ("app", "window", "url", "scene") if world.get(k)},
     }
 

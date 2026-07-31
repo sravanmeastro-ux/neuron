@@ -1,0 +1,62 @@
+{
+  "mode": "mock",
+  "repeats": 1,
+  "catalog_size": 151,
+  "tasks": 3,
+  "attempts": 3,
+  "successes": 3,
+  "failures": 0,
+  "task_success_rate": 1.0,
+  "step_success_rate": 1.0,
+  "recovery_success_rate": 1.0,
+  "average_retries": 1.0,
+  "average_completion_ms": 107.3,
+  "planner_failures": 0,
+  "perception_failures": 0,
+  "execution_failures": 0,
+  "verification_failures": 0,
+  "target_rate": 0.95,
+  "meets_target": true,
+  "by_category": {
+    "perception_fail": {
+      "attempts": 1,
+      "successes": 1,
+      "rate": 1.0
+    },
+    "verification_fail": {
+      "attempts": 1,
+      "successes": 1,
+      "rate": 1.0
+    },
+    "recovery": {
+      "attempts": 1,
+      "successes": 1,
+      "rate": 1.0
+    }
+  },
+  "per_task": {
+    "perception_missing_element": {
+      "name": "Perception miss \u2192 recovery path",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "verify_fail_then_recover": {
+      "name": "Verification failure then alternate",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "recovery_wrong_monitor": {
+      "name": "Wrong monitor recovery",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    }
+  },
+  "failures_detail": [],
+  "note": "Rates are measured from this run; not fabricated."
+}

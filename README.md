@@ -137,34 +137,70 @@ Other phrases: “list procedures”, “forget skill blender.new_project”, �
 
 This extends `app_learner` / `click_recorder` / `voice_recipes` — UI knowledge and click capture still work; Phase 9 adds named, reusable **skills** under `backend/learned_procedures.json`.
 
-## Reliability benchmark (~100 desktop workflows)
+## Status (V3)
 
-Goal: **~100 real workflows at >=95% success**, not thousands of flaky one-offs.
+### IMPLEMENTED
+
+- Voice loop: listen → local Whisper STT → endpoint → AgentLoop → TTS
+- Interruptions while speaking or acting (“Neuron stop”, barge-in)
+- Safety tiers (safe / confirm / high / blocked) + shutdown refuse + PyAutoGUI failsafe
+- Domain skills (YouTube, browser, windows, Spotify, Discord, files, Blender)
+- Semantic procedure learning (no source rewrites; no passwords/coords by default)
+- Multi-monitor NL refs (main / N / other / left / right / foreground) via live geometry
+- Multi-app staged plans with per-step verify
+- Context engine + reference resolver (deixis) + grounded planner + adaptive recovery
+- Reliability benchmark **151** scenarios (plan / mock / live) with measured metrics
+
+### EXPERIMENTAL
+
+- Live multi-monitor placement on unusual layouts (soft-pass when only one display)
+- Blender render verify (soft focus check after F12 — not full render-job OCR)
+- CapabilityRouter multi-app composer on free-form speech (best with clear “open X on monitor Y” phrasing)
+- openWakeWord / conversation-mode wake skipping
+
+### PLANNED
+
+- Broader LIVE-mode certification across more apps (current LIVE is opt-in / start small)
+- Richer perception failure injection in LIVE (today covered in unit + mock bench)
+- Cloud-free “fully autonomous long-horizon” agent — **not claimed**; NEURON is a local assistant with verify/recover, not a production autopilot
+
+NEURON is **not** declared fully autonomous or production-ready. Rates below are **measured**.
+
+## Reliability benchmark (V3.9 — 151 workflows)
+
+Goal: **>=95% task success on supported benchmark tasks**. Report the actual measured rate even when lower.
 
 ```
-Task success rate = successful completed attempts / attempted attempts
+Task success rate = successful attempts / attempted attempts
+Also tracked: step success, recovery success, avg retries, avg completion ms,
+planner / perception / execution / verification failure counts
 ```
+
+| Mode | Behavior |
+|------|----------|
+| **PLAN** | Scores fixed plans / policy / clarify expectations. **Never** executes desktop tools. |
+| **MOCK** | AgentLoop with stubbed tools (+ optional verify-fail injection for recovery). |
+| **LIVE** | Real desktop actions; safety tiers still apply. Start with `--ids`. |
 
 From `backend/`:
 
 ```bash
-# Plan shape only (no desktop side effects) — CI-safe
-python tests/run_reliability_bench.py --mode plan --repeats 5
+# Plan shape + policy (no desktop side effects) — CI-safe
+python tests/run_reliability_bench.py --mode plan --repeats 1
 
 # Closed-loop plumbing with stubbed tools
-python tests/run_reliability_bench.py --mode mock --tag core --repeats 3
+python tests/run_reliability_bench.py --mode mock --repeats 1
 
-# Real desktop — start small; confirm-tier tools auto-confirm in the bench
-python tests/run_reliability_bench.py --mode live --ids open_chrome,open_notepad,type_hello --repeats 3
+# Real desktop — start small
+python tests/run_reliability_bench.py --mode live --ids open_chrome,open_notepad --repeats 1
 
-# List catalog / filter
 python tests/run_reliability_bench.py --list
-python tests/run_reliability_bench.py --list --tag core
+python tests/run_v39_hardening_tests.py
 ```
 
-Catalog covers open/focus apps, YouTube search/play 1st/2nd, Discord↔Chrome, move to monitor 2 (soft-pass on single-monitor PCs), Downloads/find file, Calculator, type/copy/paste, scroll/UI click, popup Escape, wrong-focus recovery, compound workflows, and safety refuse-shutdown.
+Catalog covers apps, browser, YouTube, files, windows, multi-monitor, context/multi-turn (TEST A–D), multi-app, skills, recovery, interruptions, ambiguous clarify, safety, planner/perception/verification failures.
 
-JSON report: `backend/tests/reliability_report.json`.
+Latest measured (this machine, V3.9): see `backend/tests/v39_plan_report.json` and `v39_mock_report.json`.
 
 ## The reasoning brain (local AI)
 
@@ -185,11 +221,13 @@ Smarter model later: `ollama pull qwen2.5:14b`, then set `"model": "qwen2.5:14b"
 - `backend/server.py` — FastAPI + WebSocket; STT → brain → TTS; interrupt routing
 - `backend/brain.py` — command entry + escape hatches (stop, wake, monitors, confirm)
 - `backend/neuron/brain/` — AgentLoop, planner, verifier, ComputerState, Element Resolver
+- `backend/neuron/v3/` — ContextEngine, ReferenceResolver, Perception, ToolRegistry, GroundedPlanner, multi-app, loop types
 - `backend/neuron/speech/` — wake, endpoint, pipeline, TTS, interrupt
 - `backend/neuron/safety/` — Phase 8 tiers, confirm queue, failsafe
-- `backend/neuron/learning/` — **Phase 9 procedure learning** (demonstration → skill)
-- `backend/neuron/skills/` — domain skill workflows (youtube, windows, …)
-- `backend/tests/reliability/` — ~100-task reliability bench (plan / mock / live)
+- `backend/neuron/learning/` — semantic procedure learning
+- `backend/neuron/skills/` — domain skill workflows
+- `backend/tests/reliability/` — 151-task reliability bench (plan / mock / live)
+- `backend/docs/V3_FINAL_REPORT.md` — V3 integration final report
 - `backend/learned_procedures.json` — saved user-taught procedures (not source)
 - `backend/actions.py` — keyboard/mouse/app helpers
 - `requirements.txt` — Python deps (installed by the launcher)
@@ -197,4 +235,5 @@ Smarter model later: `ollama pull qwen2.5:14b`, then set `"model": "qwen2.5:14b"
 ## Privacy
 
 STT (Whisper), LLM (Ollama), OCR, and TTS stay on your machine unless you
-point a tool at the open web on purpose (browser / search).
+point a tool at the open web on purpose (browser / search). Learned skills
+scrub passwords/tokens and do not store pixel crops by default (`click_record.store_pixels=false`).

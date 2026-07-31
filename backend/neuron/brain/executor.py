@@ -83,9 +83,28 @@ def execute_plan(plan: dict | list | None, *, confirmed: bool = False, timeout: 
             pass
         spec = tool_registry.get(name)
         if not spec:
+            msg = f"Unknown tool: {name} (only registered tools may execute)"
             result.unknown.append(name)
-            print(f"[executor] unknown tool: {name}", flush=True)
-            continue
+            result.errors.append(msg)
+            result.failed_step = step
+            result.steps_run.append({
+                "action": name, "args": args, "ok": False, "out": msg,
+            })
+            print(f"[executor] unknown tool (rejected): {name}", flush=True)
+            break
+
+        ok_args, arg_err, coerced = tool_registry.validate_args(name, args)
+        if not ok_args:
+            result.errors.append(arg_err or f"Invalid args for {name}")
+            result.failed_step = step
+            result.steps_run.append({
+                "action": name, "args": args, "ok": False, "out": arg_err,
+            })
+            print(f"[executor] invalid args {name}: {arg_err}", flush=True)
+            break
+        args = coerced
+        step = {"action": spec.name, "args": args}
+        name = spec.name
 
         allowed, reason = policy.allow(name, args, confirmed=confirmed or bool(args.get("confirmed")))
         if not allowed:

@@ -73,6 +73,11 @@ def test_resolve_nl_refs():
     assert mon_mod.resolve_monitor_ref("other screen", relative_to=1, monitors=mons)["id"] == 2
     assert mon_mod.resolve_monitor_ref("the other screen", relative_to=2, monitors=mons)["id"] == 1
     assert mon_mod.resolve_monitor_ref(2, monitors=mons)["id"] == 2
+    assert mon_mod.resolve_monitor_ref("foreground monitor", relative_to=2, monitors=mons)["id"] == 2
+    assert mon_mod.resolve_monitor_ref("current screen", relative_to=1, monitors=mons)["id"] == 1
+    assert mon_mod.normalize_monitor_arg("other") == "other"
+    assert mon_mod.normalize_monitor_arg("second") == 2
+    assert mon_mod.normalize_monitor_arg("left") == "left"
     print("OK NL resolve")
 
 

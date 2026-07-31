@@ -228,14 +228,18 @@ def classify(name: str, args: dict | None = None) -> Classification:
     blob = _blob(args)
     base = catalog_tier(tool)
 
-    # Registry risk can raise the floor, but stale medium→confirm must not
-    # override tools explicitly listed as SAFE.
+    # Registry risk can raise the floor. Explicit registry SAFE may also
+    # lower an unknown-catalog default of confirm (so registered safe tools run).
+    # Stale medium→confirm must not override tools explicitly listed as SAFE
+    # in the catalog.
     try:
         from neuron.brain import tool_registry
         spec = tool_registry.get(tool)
         if spec and spec.risk:
             reg = normalize_tier(spec.risk)
-            if base == SAFE and reg == CONFIRM:
+            if reg == SAFE:
+                base = SAFE
+            elif base == SAFE and reg == CONFIRM:
                 pass
             else:
                 base = _max_tier(base, reg)

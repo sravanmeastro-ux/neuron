@@ -1,7 +1,7 @@
-"""Phase 10 — multi-monitor intelligence.
+"""Phase 10 / V3.8 — multi-monitor intelligence.
 
 Live geometry from the OS (no hardcoded resolutions). Understands:
-  screen 1 / screen 2 / left / right / main / other monitor
+  main / primary, monitor 1/2/…, other, left, right, foreground / current
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def list_monitor_dicts() -> list[dict[str, Any]]:
 
 
 def _annotate_roles(mons: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Derive left/right/main/other from live geometry — never assume resolutions."""
+    """Derive left/right/main/other/foreground from live geometry — never assume resolutions."""
     if not mons:
         return mons
     # Spatial order by center-x then center-y
@@ -87,6 +87,7 @@ def _annotate_roles(mons: list[dict[str, Any]]) -> list[dict[str, Any]]:
     leftmost_id = int(ordered[0]["id"])
     rightmost_id = int(ordered[-1]["id"])
     primary_id = next((int(m["id"]) for m in mons if m.get("primary")), int(mons[0]["id"]))
+    fg_id = foreground_monitor_id(mons)
 
     for m in mons:
         mid = int(m["id"])
@@ -102,7 +103,8 @@ def _annotate_roles(mons: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 roles.append("right")
             if mid != primary_id:
                 roles.append("other")
-            # With exactly 2 displays, non-left is also a common "other"
+        if fg_id is not None and mid == int(fg_id):
+            roles.extend(["foreground", "current", "this"])
         # Dedupe preserve order
         seen: set[str] = set()
         uniq = []
@@ -128,7 +130,8 @@ def resolve_monitor_ref(
     Resolve natural language / numeric monitor references to a monitor dict.
 
     Accepts: 1, "2", "screen 1", "left monitor", "right screen",
-    "main", "primary", "other screen", "second display", …
+    "main", "primary", "other screen", "second display",
+    "foreground monitor", "current screen", "this monitor", …
     """
     mons = monitors if monitors is not None else list_monitor_dicts()
     if not mons:
@@ -170,6 +173,31 @@ def resolve_monitor_ref(
         mid = _WORD_NUM.get(token) or int(token)
         return resolve_monitor_ref(mid, monitors=mons)
 
+    # Foreground / current / this — live window→monitor mapping (not sticky focus alone)
+    if re.search(
+        r"\b(foreground|current|this|active)\s*(?:screen|monitor|display)?\b"
+        r"|\b(?:screen|monitor|display)\s+(?:i(?:'m| am)\s+on|in\s+focus)\b",
+        text,
+    ):
+        fg = relative_to if relative_to is not None else foreground_monitor_id(mons)
+        if fg is not None:
+            hit = resolve_monitor_ref(int(fg), monitors=mons)
+            if hit:
+                return hit
+        try:
+            import monitor_focus
+            sticky = monitor_focus.get_focus()
+            if sticky is not None:
+                hit = resolve_monitor_ref(int(sticky), monitors=mons)
+                if hit:
+                    return hit
+        except Exception:
+            pass
+        for mon in mons:
+            if "foreground" in (mon.get("roles") or []) or "current" in (mon.get("roles") or []):
+                return mon
+        return next((m for m in mons if m.get("primary")), mons[0])
+
     # Role words
     if re.search(r"\b(main|primary|primary\s+screen|main\s+screen)\b", text):
         for mon in mons:
@@ -191,7 +219,7 @@ def resolve_monitor_ref(
         return max(mons, key=lambda x: int(x["left"]) + int(x["width"]) // 2)
 
     if re.search(r"\b(other|another|opposite|secondary)\b", text):
-        # Prefer monitor that is not relative_to / not primary
+        # Prefer monitor that is not relative_to / not primary — live geometry only
         cur = relative_to
         if cur is None:
             try:
@@ -219,17 +247,60 @@ def extract_monitor_ref(text: str) -> str | None:
     if not t:
         return None
     patterns = [
-        r"\b(?:on|to|onto|at)\s+(?:my\s+|the\s+)?(left|right|main|other|another|primary|secondary)\s+(?:screen|monitor|display)\b",
-        r"\b(?:on|to|onto|at)\s+(?:my\s+|the\s+)?(?:screen|monitor|display)\s*(?:number\s*)?(one|two|three|four|five|first|second|third|\d{1,2})\b",
-        r"\b(?:screen|monitor|display)\s*(?:number\s*)?(one|two|three|four|five|first|second|third|\d{1,2})\b",
-        r"\b(left|right|main|other|another|primary)\s+(?:screen|monitor|display)\b",
+        r"\b(?:on|to|onto|at)\s+(?:my\s+|the\s+)?"
+        r"(left|right|main|other|another|primary|secondary|foreground|current|this)\s+"
+        r"(?:screen|monitor|display)\b",
+        r"\b(?:on|to|onto|at)\s+(?:my\s+|the\s+)?"
+        r"(?:screen|monitor|display)\s*(?:number\s*)?"
+        r"(one|two|three|four|five|first|second|third|\d{1,2})\b",
+        r"\b(?:screen|monitor|display)\s*(?:number\s*)?"
+        r"(one|two|three|four|five|first|second|third|\d{1,2})\b",
+        r"\b(left|right|main|other|another|primary|foreground|current)\s+"
+        r"(?:screen|monitor|display)\b",
         r"\bthe\s+other\s+screen\b",
+        r"\b(?:the\s+)?foreground\s+monitor\b",
+        r"\b(?:the\s+)?current\s+(?:screen|monitor)\b",
     ]
     for p in patterns:
         m = re.search(p, t, re.I)
         if m:
             return m.group(0)
     return None
+
+
+def normalize_monitor_arg(ref: Any, *, relative_to: int | None = None) -> str | int | None:
+    """
+    Keep NL monitor args as stable tokens for plans (other/left/foreground/N).
+    Never rewrite 'other' → hardcoded '2' — resolve at act time via geometry.
+    """
+    if ref is None or ref == "":
+        return None
+    if isinstance(ref, (int, float)) and not isinstance(ref, bool):
+        return int(ref)
+    text = str(ref).strip().lower()
+    if re.fullmatch(r"\d{1,2}", text):
+        return int(text)
+    # Bare ordinals / word numbers → numeric id (stable across layouts)
+    if text in _WORD_NUM:
+        return int(_WORD_NUM[text])
+    for token in (
+        "other", "another", "opposite", "secondary",
+        "left", "right", "main", "primary",
+        "foreground", "current", "this", "active",
+    ):
+        if re.search(rf"\b{token}\b", text):
+            return "other" if token == "another" else token
+    # "monitor 2" / "screen two"
+    m = re.search(
+        r"(?:screen|monitor|display)\s*(?:number\s*)?"
+        r"(one|two|three|four|five|first|second|third|fourth|fifth|\d{1,2})",
+        text,
+    )
+    if m:
+        tok = m.group(1)
+        return _WORD_NUM.get(tok) or int(tok)
+    mon = resolve_monitor_ref(text, relative_to=relative_to)
+    return int(mon["id"]) if mon else text
 
 
 def monitor_for_rect(

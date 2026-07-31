@@ -70,8 +70,22 @@ def understand(raw: str) -> Intent:
     except Exception:
         pass
 
-    # Ultra-simple open_app / open_website without LLM
+    # High-reliability YouTube / media — never leave these to the LLM planner
+    # (planner often invents page_scroll instead of skip_ad).
     import re
+    if re.search(
+        r"\b(skip|close|dismiss)\b.{0,24}\b(ad|ads|add|adds|sad)\b"
+        r"|\b(ad|ads|add|adds|sad)\b.{0,16}\b(skip|close|dismiss)\b"
+        r"|\bskip(?:ping)?(?:\s+the|\s+this|\s+that)?\s+(?:ad|ads|add|adds|sad)\b",
+        text,
+    ):
+        intent.kind = "deterministic"
+        intent.action = "skip_ad"
+        intent.args = {}
+        intent.confidence = 0.95
+        return intent
+
+    # Ultra-simple open_app / open_website without LLM
     m = re.fullmatch(r"open ([a-z0-9 .+-]{2,40})", text)
     if m:
         name = m.group(1).strip()

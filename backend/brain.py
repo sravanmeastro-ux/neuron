@@ -330,6 +330,18 @@ def handle_command(raw: str):
     # VLM when the user refers to on-screen stuff).
     _refresh_screen_glance(text)
 
+    # ---- Critical YouTube: skip ad BEFORE AgentLoop -----------------------
+    # Root cause of "said skip the ad but it scrolled": agent_first sent this
+    # to the LLM planner, which often invents page_scroll / click junk instead
+    # of skip_ad. Keep this deterministic and ahead of OPAVR.
+    if _BROWSER and re.search(
+        r"\b(skip|close|dismiss)\b.{0,24}\b(ad|ads|add|adds|sad)\b"
+        r"|\b(ad|ads|add|adds|sad)\b.{0,16}\b(skip|close|dismiss)\b"
+        r"|\bskip(?:ping)?(?:\s+the|\s+this|\s+that)?\s+(?:ad|ads|add|adds|sad)\b",
+        text,
+    ):
+        return browser.skip_ad(), True
+
     # ---- Phase 9: learn PROCEDURE by demonstration (before AgentLoop) --
     # Must win over recipe match for "learn how I create a Blender project".
     try:

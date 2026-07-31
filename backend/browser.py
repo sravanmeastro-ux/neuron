@@ -789,56 +789,123 @@ def _op_ensure_playback(w, want: str = "play"):
 
 
 def _op_skip_ad(w):
-    """Click YouTube's Skip Ad / Skip Ads control if one is visible."""
+    """Click YouTube's Skip Ad / Skip Ads control if one is visible.
+
+    Scoped to the player — never page-scroll or click random 'Skip' in comments.
+    """
     page = _active_page(w)
     page.bring_to_front()
     url = page.url or ""
     if "youtube.com" not in url:
         raise RuntimeError("YouTube isn't open — open a video first")
 
-    # Poll briefly: the Skip button often appears a few seconds into the ad.
+    # Ensure the player (and Skip control) is in view — comments scroll hides it.
+    try:
+        page.evaluate(
+            """() => {
+              const p = document.querySelector('#movie_player, .html5-video-player');
+              if (p) p.scrollIntoView({block: 'center', inline: 'nearest'});
+              window.scrollTo({top: 0, behavior: 'instant'});
+            }"""
+        )
+    except Exception:
+        pass
+
+    # Prefer DOM/JS click inside the player (most reliable vs Playwright visibility races).
+    js_click = """() => {
+      const root = document.querySelector('#movie_player, .html5-video-player, ytd-player') || document;
+      const sels = [
+        'button.ytp-skip-ad-button',
+        'button.ytp-ad-skip-button',
+        'button.ytp-ad-skip-button-modern',
+        '.ytp-skip-ad-button',
+        '.ytp-ad-skip-button-modern',
+        '.ytp-ad-skip-button-container button',
+        'button.ytp-ad-skip-button-solid',
+        '.ytp-ad-skip-button-slot button',
+      ];
+      for (const sel of sels) {
+        const el = root.querySelector(sel);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style && (style.display === 'none' || style.visibility === 'hidden')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        el.click();
+        return true;
+      }
+      const buttons = root.querySelectorAll('button, [role="button"]');
+      for (const el of buttons) {
+        const t = (el.innerText || el.getAttribute('aria-label') || '').trim();
+        if (!/^skip\\s*ads?$/i.test(t) && !/skip\\s*ads?/i.test(el.getAttribute('aria-label') || '')) continue;
+        el.click();
+        return true;
+      }
+      return false;
+    }"""
+
+    # Player-scoped selectors only (do NOT use bare button:has-text('Skip') —
+    # that matches unrelated UI and contributed to random scrolling/clicking).
     selectors = [
-        "button.ytp-skip-ad-button",
-        "button.ytp-ad-skip-button",
-        "button.ytp-ad-skip-button-modern",
-        ".ytp-skip-ad-button",
-        ".ytp-ad-skip-button-modern",
-        "button:has-text('Skip')",
-        "button:has-text('Skip Ad')",
-        "button:has-text('Skip Ads')",
-        ".ytp-ad-skip-button-container button",
+        "#movie_player button.ytp-skip-ad-button",
+        "#movie_player button.ytp-ad-skip-button",
+        "#movie_player button.ytp-ad-skip-button-modern",
+        "#movie_player .ytp-skip-ad-button",
+        "#movie_player .ytp-ad-skip-button-modern",
+        "#movie_player .ytp-ad-skip-button-container button",
+        ".html5-video-player button.ytp-skip-ad-button",
+        ".html5-video-player .ytp-ad-skip-button-container button",
+        "#movie_player button:has-text('Skip Ad')",
+        "#movie_player button:has-text('Skip Ads')",
     ]
-    deadline = time.time() + 12
+    deadline = time.time() + 14
     while time.time() < deadline:
+        try:
+            if page.evaluate(js_click):
+                time.sleep(0.35)
+                return "Skipped the ad."
+        except Exception:
+            pass
         for sel in selectors:
             try:
                 loc = page.locator(sel).first
                 if loc.count() == 0:
                     continue
-                if not loc.is_visible(timeout=300):
+                if not loc.is_visible(timeout=250):
                     continue
                 loc.click(timeout=2000, force=True)
-                time.sleep(0.4)
+                time.sleep(0.35)
                 return "Skipped the ad."
             except Exception:
                 continue
-        # Also try role-based name match
+        # Role match scoped to player
         try:
-            btn = page.get_by_role("button", name=re.compile(r"skip\s*ads?", re.I)).first
-            if btn.count() and btn.is_visible(timeout=300):
+            player = page.locator("#movie_player, .html5-video-player").first
+            btn = player.get_by_role("button", name=re.compile(r"^skip\s*ads?$", re.I)).first
+            if btn.count() and btn.is_visible(timeout=250):
                 btn.click(timeout=2000, force=True)
                 return "Skipped the ad."
         except Exception:
             pass
-        time.sleep(0.45)
+        time.sleep(0.4)
 
-    # No skip button — maybe there is no ad, or it's unskippable yet.
+    # Detect ad more broadly (YouTube class names churn).
     try:
-        has_ad = page.locator(".ad-showing, .ytp-ad-player-overlay, .ytp-ad-module").count() > 0
+        has_ad = bool(page.evaluate(
+            """() => {
+              const p = document.querySelector('#movie_player, .html5-video-player');
+              if (!p) return false;
+              if (p.classList.contains('ad-showing')) return true;
+              if (p.querySelector('.ytp-ad-player-overlay, .ytp-ad-module, .ytp-ad-text, .videoAdUi')) return true;
+              const v = p.querySelector('video');
+              if (v && v.getAttribute('src') && /googlevideo|doubleclick|pagead/i.test(v.src)) return true;
+              return !!document.querySelector('.ad-showing, .ytp-ad-player-overlay, ytd-ad-slot-renderer');
+            }"""
+        ))
     except Exception:
         has_ad = False
     if has_ad:
-        raise RuntimeError("There's an ad, but the Skip button isn't available yet")
+        raise RuntimeError("There's an ad, but the Skip button isn't available yet — try again in a second")
     return "I don't see an ad to skip right now."
 
 

@@ -12,6 +12,8 @@ nvidia-cublas-cu12
 nvidia-cudnn-cu12
 pyautogui
 pywinauto
+pycaw
+comtypes
 rapidocr-onnxruntime
 # Optional Phase 6 extras (local/free):
 # openwakeword

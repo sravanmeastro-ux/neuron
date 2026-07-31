@@ -1,6 +1,6 @@
 """NEURON reliability benchmark CLI.
 
-Prefer 100 workflows at 95%+ reliability over thousands of flaky commands.
+Prefer 150+ workflows at 95%+ reliability on supported tasks; report measured rates honestly.
 
 Examples:
   python tests/run_reliability_bench.py

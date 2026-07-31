@@ -37,6 +37,17 @@ def _is_stop_talk(text: str) -> bool:
         ))
 
 
+def _is_skip_ad_cmd(text: str) -> bool:
+    """Priority voice command — must interrupt long AgentLoop work."""
+    return bool(re.search(
+        r"\b(skip|close|dismiss)\b.{0,24}\b(ad|ads|add|adds|sad)\b"
+        r"|\b(ad|ads|add|adds|sad)\b.{0,16}\b(skip|close|dismiss)\b"
+        r"|\bskip(?:ping)?(?:\s+the|\s+this|\s+that)?\s+(?:ad|ads|add|adds|sad)\b",
+        text or "",
+        re.I,
+    ))
+
+
 @app.on_event("startup")
 async def _startup():
     async def keep_warm_llm():
@@ -110,6 +121,7 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
     # Stop / interrupt always wins — even mid-task / mid-speech.
     if _is_stop_talk(text):
         busy_state["busy"] = False
+        busy_state.pop("pending_override", None)
         try:
             from neuron.speech.interrupt import request as request_interrupt
             request_interrupt(reason=f"phrase:{text!r}")
@@ -129,11 +141,26 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
         return
 
     if busy_state["busy"]:
+        # Skip-ad must interrupt long AgentLoop/scroll thrash — queue override.
+        if _is_skip_ad_cmd(text):
+            busy_state["pending_override"] = text
+            try:
+                from neuron.speech.interrupt import request as request_interrupt
+                request_interrupt(reason="skip_ad_override")
+            except Exception:
+                pass
+            await websocket.send_text(json.dumps({
+                "type": "response",
+                "heard": text,
+                "text": "Got it — skipping the ad.",
+                "acted": True,
+            }))
+            return
         # Non-stop speech while working — do not queue; wait for interrupt phrase.
         await websocket.send_text(json.dumps({
             "type": "response",
             "heard": text,
-            "text": "Still working — say 'Neuron, stop' to interrupt.",
+            "text": "Still working — say 'Neuron, stop' to interrupt, or 'skip the ad'.",
             "acted": False,
         }))
         return
@@ -190,6 +217,19 @@ async def _run_command(websocket: WebSocket, text: str, busy_state: dict):
             clear_interrupt()
         except Exception:
             pass
+
+    override = busy_state.pop("pending_override", None)
+    # If we interrupted to honor skip-ad, don't TTS a stale "Stopped."
+    if not (override and reply == "Stopped."):
+        await _send_command_response(websocket, text, reply, acted)
+
+    if override:
+        await _run_command(websocket, override, busy_state)
+
+
+async def _send_command_response(websocket: WebSocket, text: str, reply, acted: bool):
+    """TTS + websocket payload (split out so override can reuse)."""
+    # Original body after brain.handle_command lived inline — keep behavior.
 
     if reply == "__STOP_SPEECH__":
         try:

@@ -45,7 +45,7 @@ def run(
     Full brain loop via AgentLoop.
 
     Returns (reply, acted, meta).
-    meta.path: recipe | deterministic | llm | opavr | ask_user | rules_fallback | empty | stop
+    meta.path: capability | recipe | deterministic | llm | opavr | ask_user | rules_fallback | empty | stop
     """
     meta: dict[str, Any] = {
         "path": "",
@@ -73,6 +73,103 @@ def run(
         meta["path"] = "stop"
         return "__STOP_SPEECH__", True, meta
 
+    cfg = _agent_cfg()
+
+    # V3.3 ReferenceResolver — rewrite deixis using ContextEngine before routing.
+    # V3.4: PerceptionEngine supplies ui_candidates only when context is insufficient.
+    resolved_request = raw
+    if cfg.get("reference_resolver", True):
+        try:
+            from neuron.v3.reference_resolver import needs_resolution, resolve_reference
+            if needs_resolution(intent.normalized or raw) or needs_resolution(raw):
+                ref = resolve_reference(raw, intent=intent)
+                if (
+                    cfg.get("perception_engine", True)
+                    and (
+                        ref.needs_clarification
+                        or ref.confidence < 0.55
+                        or ref.evidence in ("ordinal_no_context", "unresolved")
+                    )
+                ):
+                    try:
+                        from neuron.v3.perception_engine import (
+                            ui_candidates_for,
+                            wants_ui_candidates,
+                        )
+                        probe = (
+                            raw if needs_resolution(raw) else (intent.normalized or raw)
+                        )
+                        if wants_ui_candidates(probe):
+                            ui_candidates = ui_candidates_for(probe) or None
+                            if ui_candidates:
+                                meta["perception_candidates"] = len(ui_candidates)
+                                ref = resolve_reference(
+                                    raw,
+                                    intent=intent,
+                                    ui_candidates=ui_candidates,
+                                )
+                    except Exception as pe_exc:
+                        _log(f"perception candidates skipped: {pe_exc}")
+                meta["reference"] = ref.to_dict()
+                if ref.needs_clarification:
+                    meta["path"] = "ask_user"
+                    meta["elapsed_ms"] = int((time.time() - t0) * 1000)
+                    say = ref.clarification_prompt or "Which one did you mean?"
+                    tr.user(raw)
+                    tr.final("ask_user", say)
+                    meta["trace"] = tr.to_list()
+                    _log(f"reference clarify conf={ref.confidence:.2f}: {say!r}")
+                    try:
+                        import memory
+                        memory.log("neuron", say)
+                    except Exception:
+                        pass
+                    return say, True, meta
+                if ref.rewritten_command and ref.confidence >= 0.55:
+                    resolved_request = ref.rewritten_command
+                    intent = intent_mod.understand(resolved_request)
+                    _log(
+                        f"reference resolved -> {resolved_request!r} "
+                        f"({ref.target_type}/{ref.resolved_target}) "
+                        f"conf={ref.confidence:.2f} src={ref.source}"
+                    )
+        except Exception as exc:
+            _log(f"reference_resolver skipped: {exc}")
+
+    # V3 CapabilityRouter — high-confidence capabilities → fixed plan → AgentLoop.
+    # Unsupported → fall through to recipe/deterministic/LLM (V2 paths unchanged).
+    if cfg.get("capability_router", True):
+        try:
+            from neuron.v3 import capability_router as cap_mod
+            routed = cap_mod.route(resolved_request, intent=intent)
+            if routed.ok and routed.steps and routed.capability:
+                meta["path"] = "capability"
+                meta["capability"] = routed.capability.id
+                meta["capability_source"] = routed.capability.source
+                _log(
+                    f"capability id={routed.capability.id} "
+                    f"tool={routed.capability.tool} "
+                    f"conf={routed.capability.confidence:.2f} "
+                    f"src={routed.capability.source}"
+                )
+                plan = normalize_plan(routed.as_plan())
+                say, acted, loop_meta, goal = loop.run(
+                    request=resolved_request,
+                    context="",
+                    normalized=intent.normalized or resolved_request,
+                    plan=plan,
+                    observe_blob=(
+                        f"capability={routed.capability.id} "
+                        f"tool={routed.capability.tool}"
+                    ),
+                    confirmed=confirmed,
+                )
+                return _finish(
+                    say, acted, meta, loop_meta, goal, tr, t0, path="capability"
+                )
+        except Exception as exc:
+            _log(f"capability_router skipped: {exc}")
+
     # Fast path: known recipe / trivial open — still through AgentLoop (verify required)
     if intent.kind in ("recipe", "deterministic") and intent.action:
         meta["path"] = intent.kind
@@ -81,9 +178,9 @@ def run(
             "steps": [{"tool": intent.action, "arguments": intent.args or {}}],
         })
         say, acted, loop_meta, goal = loop.run(
-            request=raw,
+            request=resolved_request,
             context="",
-            normalized=intent.normalized or raw,
+            normalized=intent.normalized or resolved_request,
             plan=plan,
             observe_blob=f"intent={intent.kind} action={intent.action}",
             confirmed=confirmed,
@@ -96,9 +193,9 @@ def run(
     from neuron.brain import resolver as resolver_mod
     from neuron.brain.snapshot import enrich_snapshot, gather_snapshot
 
-    plan_text = intent.normalized or raw
+    plan_text = intent.normalized or resolved_request
     snap = gather_snapshot(plan_text, deep=False)
-    resolve = resolver_mod.resolve(raw, snap)
+    resolve = resolver_mod.resolve(resolved_request, snap)
     if resolve.ambiguous and resolve.band == "low" and intent.normalized:
         resolve2 = resolver_mod.resolve(intent.normalized, snap)
         if resolve2.confidence > resolve.confidence:
@@ -149,7 +246,7 @@ def run(
         blob = screen_ctx if len(screen_ctx) <= 2200 else screen_ctx[:2200] + "\n…"
         context = (context + "\n\nLIVE SCREENS:\n" + blob).strip()
 
-    plan_request = raw
+    plan_request = resolved_request
     plan_normalized = intent.normalized
     if resolve.ambiguous and resolve.band == "high" and resolve.rewritten_request:
         plan_request = resolve.rewritten_request

@@ -70,6 +70,61 @@ _BUILTINS: list[dict[str, Any]] = [
         ],
         "builtin": True,
         "source": "builtin",
+        "semantic": True,
+    },
+    {
+        "id": "blender.start_render",
+        "domain": "blender",
+        "name": "start_render",
+        "say": [
+            "start blender render",
+            "render blender project",
+            "start render in blender",
+            "start a blender render",
+            "render this blender project",
+        ],
+        "params": ["project"],
+        "steps": [
+            {
+                "action": "blender.open_project",
+                "args": {"query": "{project}"},
+                "target": "{project}",
+                "expected_result": "Blender project open",
+            },
+            {
+                "action": "wait",
+                "args": {"seconds": 2},
+                "target": "Blender",
+                "expected_result": "Blender settled",
+            },
+            {
+                "action": "focus_app",
+                "args": {"name": "Blender"},
+                "target": "Blender",
+                "expected_result": "Blender focused",
+            },
+            {
+                "action": "press_keys",
+                "args": {"keys": "f12"},
+                "target": "Render",
+                "expected_result": "render triggered (F12)",
+            },
+            {
+                "action": "wait",
+                "args": {"seconds": 1.5},
+                "target": "render",
+                "expected_result": "render UI visible",
+            },
+            {
+                "action": "find_element",
+                "args": {"name": "Render"},
+                "target": "Render",
+                "expected_result": "render UI or progress detectable",
+            },
+        ],
+        "builtin": True,
+        "source": "builtin",
+        "semantic": True,
     },
 ]
 
@@ -113,8 +168,10 @@ def skill_id_from_goal(goal: str, app_hint: str = "") -> str:
         action = re.sub(rf"\b{re.escape(a)}\b", " ", action)
     action = re.sub(r"[^a-z0-9]+", "_", action).strip("_")
     # Prefer short meaningful names
-    if "project" in g and app == "blender":
+    if "project" in g and app == "blender" and "render" not in g:
         action = "new_project"
+    elif "render" in g and app == "blender":
+        action = "start_render"
     elif "friends" in g and app == "discord":
         action = "open_friends"
     elif not action or action in ("how", "to", "i"):
@@ -226,34 +283,24 @@ def save_procedure(
     source: str = "demonstration",
     meta: dict | None = None,
 ) -> tuple[bool, str, dict | None]:
-    """Persist a learned procedure. Refuses source-modifying steps."""
+    """Persist a learned semantic procedure. Refuses source / private / coord skills."""
+    from neuron.learning.semantic import rejects_private_field, sanitize_steps
+
     sid = (skill_id or "").strip().lower()
     if not sid or "." not in sid:
         return False, "Skill id must look like domain.name (e.g. blender.new_project).", None
     if not steps:
         return False, "No steps to save.", None
 
-    clean: list[dict] = []
     for s in steps:
         if rejects_source_write(s):
             return False, "Refusing to learn a procedure that modifies NEURON source code.", None
-        action = str(s.get("action") or s.get("tool") or "").strip()
-        if not action:
-            continue
-        # Ban shell that writes to repo
-        args = dict(s.get("args") or {})
-        if action in ("run_shell", "run_powershell", "create_file") and rejects_source_write(args):
-            return False, "Refusing shell/file step that targets project source.", None
-        step = {
-            "action": action,
-            "args": args,
-            "target": s.get("target") or "",
-            "expected_result": s.get("expected_result") or s.get("expect") or "",
-        }
-        clean.append(step)
+        if rejects_private_field(s):
+            return False, "Refusing to learn a procedure that captures passwords or private fields.", None
 
+    clean, warnings = sanitize_steps(steps, drop_coordinates=True)
     if not clean:
-        return False, "No usable steps after filtering.", None
+        return False, "No usable semantic steps after filtering (coordinates/private data dropped).", None
 
     parts = sid.split(".", 1)
     domain = (domain or parts[0]).strip().lower()
@@ -265,7 +312,6 @@ def save_procedure(
             for alt in b.get("say") or []:
                 if alt and alt.lower() not in [x.lower() for x in phrases]:
                     phrases.append(alt)
-            # Prefer builtin steps if demonstration empty (handled by caller)
             break
 
     proc = {
@@ -276,8 +322,9 @@ def save_procedure(
         "steps": clean,
         "builtin": False,
         "source": source,
+        "semantic": True,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "meta": meta or {},
+        "meta": {**(meta or {}), "sanitize_warnings": warnings[:12]},
     }
 
     data = _load()
@@ -300,7 +347,8 @@ def save_procedure(
     except Exception:
         pass
 
-    return True, f"Learned skill {sid} ({len(clean)} steps). Say: '{phrases[0]}'.", proc
+    warn_txt = f" ({len(warnings)} filtered)" if warnings else ""
+    return True, f"Learned skill {sid} ({len(clean)} semantic steps){warn_txt}. Say: '{phrases[0]}'.", proc
 
 
 def delete_procedure(skill_id: str) -> str:
@@ -315,7 +363,13 @@ def delete_procedure(skill_id: str) -> str:
 
 
 def clicks_to_steps(click_recipe: dict, *, app: str = "") -> list[dict]:
-    """Convert a click_recorder recipe into AgentLoop steps."""
+    """Convert a click_recorder recipe into adaptive semantic AgentLoop steps.
+
+    Prefers UIA name / automationId. Drops raw x,y (not adaptive to window moves).
+    Never retains screenshots or pixel crops.
+    """
+    from neuron.learning.semantic import sanitize_steps
+
     steps: list[dict] = []
     app_name = (app or click_recipe.get("app") or "").strip()
     if app_name and app_name.lower() not in ("unknown", "explorer"):
@@ -335,7 +389,7 @@ def clicks_to_steps(click_recipe: dict, *, app: str = "") -> list[dict]:
     for raw in click_recipe.get("steps") or []:
         el = raw.get("element") or {}
         name = (el.get("name") or "").strip()
-        x, y = raw.get("x"), raw.get("y")
+        auto_id = str(el.get("automationId") or el.get("automation_id") or "").strip()
         button = raw.get("button") or "left"
         if name and len(name) >= 2:
             steps.append({
@@ -344,13 +398,16 @@ def clicks_to_steps(click_recipe: dict, *, app: str = "") -> list[dict]:
                 "target": name,
                 "expected_result": f"clicked {name}",
             })
-        elif x is not None and y is not None:
+        elif auto_id and len(auto_id) >= 2:
             steps.append({
-                "action": "click",
-                "args": {"x": int(x), "y": int(y), "button": button},
-                "target": f"({x},{y})",
-                "expected_result": "click landed",
+                "action": "click_element",
+                "args": {"name": auto_id, "automation_id": auto_id},
+                "target": auto_id,
+                "expected_result": f"clicked {auto_id}",
             })
+        else:
+            # V3.8: skip absolute coordinates — they break when windows move
+            continue
         # Small wait between clicks
         steps.append({
             "action": "wait",
@@ -358,15 +415,22 @@ def clicks_to_steps(click_recipe: dict, *, app: str = "") -> list[dict]:
             "target": "between clicks",
             "expected_result": "ready for next step",
         })
-    # Drop trailing wait
-    while steps and steps[-1].get("action") == "wait" and len(steps) > 1:
-        # keep one settle wait at end for verify
-        break
-    return steps
+        _ = button  # reserved for future button-aware semantic click
+
+    clean, _warnings = sanitize_steps(steps, drop_coordinates=True)
+    return clean
 
 
-def run_procedure(proc_id: str = "", query: str = "", *, confirmed: bool = False) -> str:
-    """Execute a learned/builtin procedure via AgentLoop."""
+def run_procedure(
+    proc_id: str = "",
+    query: str = "",
+    *,
+    confirmed: bool = False,
+    params: dict | None = None,
+) -> str:
+    """Execute a learned/builtin semantic procedure via AgentLoop."""
+    from neuron.learning.semantic import bind_params, scrub_args
+
     proc = get(proc_id) if proc_id else None
     if not proc and query:
         proc = match(query)
@@ -377,9 +441,45 @@ def run_procedure(proc_id: str = "", query: str = "", *, confirmed: bool = False
         if rejects_source_write(s):
             return "Blocked: this procedure targets source code and will not run."
 
+    # Merge explicit params + extract simple "project=X" from query
+    bound_params = dict(params or {})
+    if query:
+        m = re.search(r"\bproject[=:\s]+([^\s,]+)", query, re.I)
+        if m and "project" not in bound_params:
+            bound_params["project"] = m.group(1).strip()
+        # "start blender render MyScene" → project=MyScene when param listed
+        if "project" in (proc.get("params") or []) and "project" not in bound_params:
+            q2 = re.sub(
+                r"(?i)\b(start|render|blender|project|the|a|an|in|this)\b",
+                " ",
+                query,
+            )
+            q2 = re.sub(r"\s+", " ", q2).strip()
+            if q2 and len(q2) >= 2:
+                bound_params["project"] = q2.split()[0]
+
+    raw_steps = list(proc.get("steps") or [])
+    steps = bind_params(raw_steps, scrub_args(bound_params) if bound_params else bound_params)
+    # If open_project has empty query and no project, fall back to focus Blender
+    fixed = []
+    for s in steps:
+        args = dict(s.get("args") or {})
+        if s.get("action") == "blender.open_project":
+            q = str(args.get("query") or args.get("path") or "").strip()
+            if not q or q == "{project}":
+                fixed.append({
+                    "action": "open_app",
+                    "args": {"name": "Blender"},
+                    "target": "Blender",
+                    "expected_result": "Blender window is open",
+                })
+                continue
+        fixed.append(s)
+    steps = fixed
+
     plan = {
         "say": f"Running {proc.get('id')}.",
-        "steps": list(proc.get("steps") or []),
+        "steps": steps,
     }
     try:
         from neuron.brain.agent_loop import AgentLoop
@@ -388,7 +488,10 @@ def run_procedure(proc_id: str = "", query: str = "", *, confirmed: bool = False
         say, acted, meta, goal = AgentLoop(confirmed=confirmed).run(
             request=query or proc.get("id") or "",
             plan=plan,
-            context=f"Learned procedure {proc.get('id')} source={proc.get('source')}",
+            context=(
+                f"Learned semantic procedure {proc.get('id')} "
+                f"source={proc.get('source')} adaptive=true"
+            ),
             normalized=(proc.get("say") or [proc.get("id")])[0],
         )
         status = getattr(goal, "status", "") or meta.get("path")

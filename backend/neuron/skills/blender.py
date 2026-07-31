@@ -89,6 +89,68 @@ def new_file() -> ToolResult:
         return fail(str(exc))
 
 
+def wait_for_app(timeout: float = 12.0) -> ToolResult:
+    """Wait until Blender process/window is detectable (semantic, not coordinates)."""
+    deadline = time.time() + max(1.0, float(timeout or 12))
+    last = None
+    while time.time() < deadline:
+        last = focus()
+        if last.success:
+            return ok("Blender is ready.", state={"waited": True}, method="blender")
+        time.sleep(0.5)
+    return fail(last.message if last else "Blender did not appear in time.")
+
+
+def trigger_render() -> ToolResult:
+    """Start render via F12 (adaptive — no screen coordinates)."""
+    r = focus()
+    if not r.success:
+        r = open()
+        if not r.success:
+            return r
+        time.sleep(1.0)
+    try:
+        import actions
+        actions.press_keys("f12")
+        return ok("Triggered Blender render (F12).", method="blender")
+    except Exception as exc:
+        return fail(str(exc))
+
+
+def verify_render_started() -> ToolResult:
+    """Best-effort check that Blender is still present after render trigger."""
+    fr = focus()
+    if fr.success:
+        return ok("Blender focused after render trigger.", state={"soft": True}, method="blender")
+    return fail(fr.message or "Could not verify Blender after render.")
+
+
+def start_render(project: str = "", path: str = "") -> ToolResult:
+    """Semantic skill: open project (optional) → wait → trigger render → verify."""
+    proj = (project or path or "").strip()
+    if proj:
+        r = open_project(path=proj if proj.lower().endswith(".blend") else "", query=proj)
+        if not r.success and proj.lower().endswith(".blend"):
+            return r
+    else:
+        r = open()
+        if not r.success:
+            return r
+    w = wait_for_app(8.0)
+    if not w.success:
+        return w
+    tr = trigger_render()
+    if not tr.success:
+        return tr
+    time.sleep(0.8)
+    vr = verify_render_started()
+    return ok(
+        f"Started Blender render{(' for ' + proj) if proj else ''}. {vr.message}",
+        state={"project": proj or None, "render": True},
+        method="blender",
+    )
+
+
 open_tool = handler(lambda a: open())
 focus_tool = handler(lambda a: focus())
 open_project_tool = handler(
@@ -98,3 +160,12 @@ open_project_tool = handler(
     )
 )
 new_file_tool = handler(lambda a: new_file())
+wait_for_app_tool = handler(lambda a: wait_for_app(float(arg(a, "timeout", "seconds", default=12) or 12)))
+trigger_render_tool = handler(lambda a: trigger_render())
+verify_render_tool = handler(lambda a: verify_render_started())
+start_render_tool = handler(
+    lambda a: start_render(
+        str(arg(a, "project", "query", "name", default="")),
+        str(arg(a, "path", "file", default="")),
+    )
+)

@@ -1,44 +1,338 @@
 {
-  "mode": "live",
-  "repeats": 3,
-  "tasks": 3,
-  "attempts": 9,
-  "successes": 9,
+  "mode": "plan",
+  "repeats": 1,
+  "tasks": 40,
+  "attempts": 40,
+  "successes": 40,
   "failures": 0,
   "task_success_rate": 1.0,
   "target_rate": 0.95,
   "meets_target": true,
   "by_category": {
     "apps": {
-      "attempts": 6,
-      "successes": 6,
+      "attempts": 9,
+      "successes": 9,
+      "rate": 1.0
+    },
+    "youtube": {
+      "attempts": 5,
+      "successes": 5,
+      "rate": 1.0
+    },
+    "windows": {
+      "attempts": 3,
+      "successes": 3,
+      "rate": 1.0
+    },
+    "files": {
+      "attempts": 4,
+      "successes": 4,
       "rate": 1.0
     },
     "input": {
-      "attempts": 3,
-      "successes": 3,
+      "attempts": 5,
+      "successes": 5,
+      "rate": 1.0
+    },
+    "recovery": {
+      "attempts": 4,
+      "successes": 4,
+      "rate": 1.0
+    },
+    "ui": {
+      "attempts": 2,
+      "successes": 2,
+      "rate": 1.0
+    },
+    "procedures": {
+      "attempts": 1,
+      "successes": 1,
+      "rate": 1.0
+    },
+    "workflow": {
+      "attempts": 7,
+      "successes": 7,
       "rate": 1.0
     }
   },
   "per_task": {
     "open_chrome": {
       "name": "Open Chrome",
-      "attempts": 3,
-      "successes": 3,
+      "attempts": 1,
+      "successes": 1,
       "failures": 0,
       "rate": 1.0
     },
     "open_notepad": {
       "name": "Open Notepad",
-      "attempts": 3,
-      "successes": 3,
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_calculator": {
+      "name": "Open Calculator",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_discord": {
+      "name": "Open Discord",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_spotify": {
+      "name": "Open Spotify",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_explorer": {
+      "name": "Open File Explorer",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_edge": {
+      "name": "Open Edge",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_steam": {
+      "name": "Open Steam",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "youtube_home": {
+      "name": "Go to YouTube home",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "youtube_search": {
+      "name": "Search YouTube",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "youtube_play_first": {
+      "name": "Play first video",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "youtube_play_second": {
+      "name": "Play second video",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "switch_to_discord": {
+      "name": "Switch to Discord",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "return_to_chrome": {
+      "name": "Return to Chrome",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "move_chrome_monitor_2": {
+      "name": "Move Chrome to screen 2",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_downloads": {
+      "name": "Open Downloads",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "find_pdf": {
+      "name": "Find a PDF file",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "search_files_report": {
+      "name": "Find particular file by name",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_notepad_type": {
+      "name": "Open Notepad and type text",
+      "attempts": 1,
+      "successes": 1,
       "failures": 0,
       "rate": 1.0
     },
     "type_hello": {
       "name": "Type text",
-      "attempts": 3,
-      "successes": 3,
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "copy_selection": {
+      "name": "Copy selection",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "paste_clipboard": {
+      "name": "Paste",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "press_escape": {
+      "name": "Press Escape (dismiss popup)",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "click_search": {
+      "name": "Click Search UI element",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "scroll_to_element": {
+      "name": "Scroll toward UI content",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "recover_popup_escape": {
+      "name": "Recover from a popup",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "recover_wrong_focus": {
+      "name": "Recover when wrong window focused",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "blender_new_project": {
+      "name": "Create Blender project (procedure)",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_chrome_youtube_search": {
+      "name": "Chrome then YouTube search",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_discord_then_chrome": {
+      "name": "Discord then return to Chrome",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_play_first_fullscreen": {
+      "name": "Play first video fullscreen",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_notepad_type_copy": {
+      "name": "Notepad type and copy",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_downloads_find": {
+      "name": "Open Downloads and find pdf",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "open_paint": {
+      "name": "Open Paint",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "youtube_search_music": {
+      "name": "Search YouTube for music",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "find_png": {
+      "name": "Find PNG files",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "type_multiline": {
+      "name": "Type multiline text",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "recover_focus_notepad": {
+      "name": "Recover focus to Notepad",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_chrome_discord_chrome": {
+      "name": "Chrome to Discord to Chrome",
+      "attempts": 1,
+      "successes": 1,
+      "failures": 0,
+      "rate": 1.0
+    },
+    "wf_calc_then_notepad": {
+      "name": "Calculator then Notepad",
+      "attempts": 1,
+      "successes": 1,
       "failures": 0,
       "rate": 1.0
     }

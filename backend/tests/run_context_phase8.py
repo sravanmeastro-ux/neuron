@@ -199,7 +199,7 @@ def test_agent_high_confidence_rewrites():
     )
     captured = {}
 
-    def fake_plan(request, context="", normalized=""):
+    def fake_plan(request, context="", normalized="", **kwargs):
         captured["request"] = request
         captured["context"] = context
         return {"say": "Playing.", "steps": [{"action": "browser_click", "args": {"index": 0}}]}

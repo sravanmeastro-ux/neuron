@@ -1,6 +1,8 @@
-"""Tool registry — name → schema, handler, risk level.
+"""Tool registry — name → schema, handler, risk, control methods.
 
 Planner never touches the OS; it only emits action names registered here.
+V3.5: typed params, validation, aliases, control_methods, planner visibility.
+Only registered tools may execute — no arbitrary Python/shell from the LLM.
 """
 
 from __future__ import annotations
@@ -12,15 +14,54 @@ from neuron.catalog import DEFAULT_RISK, LEGACY_EXECUTORS, NEW_TOOLS
 
 Handler = Callable[[dict], Any]
 
+# Never expose these to the LLM planner (registered only for gated/legacy paths).
+_PLANNER_HIDDEN = frozenset({
+    "run_shell",
+    "run_powershell",
+    "eval",
+    "exec",
+    "python",
+    "subprocess",
+})
+
+# Canonical alias → registered tool
+_ALIASES: dict[str, str] = {
+    "focus_window": "focus_app",
+    "open_url": "browser_navigate",
+    "read_page": "browser_read_page",
+    "find_file": "search_files",
+    "inspect_screen": "analyze_screen",
+    "press_keys": "press_keys",  # keep identity; hotkey is separate
+}
+
 
 @dataclass
 class ToolSpec:
     name: str
     handler: Handler
     description: str = ""
-    args_schema: dict = field(default_factory=dict)
-    risk: str = "low"  # low | medium | high | confirm
+    args_schema: dict = field(default_factory=dict)  # planner display
+    params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # params[name] = {type: str|int|float|bool|any, required: bool, description?: str}
+    risk: str = "low"  # safe | low | medium | high | confirm | blocked
     verify: str = ""  # optional verify hint for verifier
+    control_methods: list[str] = field(default_factory=list)
+    # e.g. ["dom","uia","filesystem","api","perception","input","coords"]
+    planner_visible: bool = True
+    aliases: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "args_schema": dict(self.args_schema),
+            "params": dict(self.params),
+            "risk": self.risk,
+            "verify": self.verify,
+            "control_methods": list(self.control_methods),
+            "planner_visible": self.planner_visible,
+            "aliases": list(self.aliases),
+        }
 
 
 _REGISTRY: dict[str, ToolSpec] = {}
@@ -33,25 +74,82 @@ def register(
     *,
     description: str = "",
     args_schema: dict | None = None,
+    params: dict[str, dict[str, Any]] | None = None,
     risk: str | None = None,
     verify: str = "",
+    control_methods: list[str] | None = None,
+    planner_visible: bool | None = None,
+    aliases: tuple[str, ...] | list[str] | None = None,
     overwrite: bool = False,
 ) -> None:
     if name in _REGISTRY and not overwrite:
         return
+    schema = dict(args_schema or {})
+    typed = dict(params or {})
+    if not typed and schema:
+        # Promote legacy display schema → typed params (all optional str-ish)
+        for k, v in schema.items():
+            typed[k] = {
+                "type": _infer_type_label(str(v)),
+                "required": False,
+                "description": str(v),
+            }
+    if not schema and typed:
+        schema = {
+            k: (v.get("description") or v.get("type") or "any")
+            for k, v in typed.items()
+        }
+    visible = planner_visible
+    if visible is None:
+        visible = name not in _PLANNER_HIDDEN
+    alias_t = tuple(aliases or ())
+    methods = list(control_methods or [])
     _REGISTRY[name] = ToolSpec(
         name=name,
         handler=handler,
         description=description or name,
-        args_schema=args_schema or {},
+        args_schema=schema,
+        params=typed,
         risk=risk or DEFAULT_RISK.get(name, "confirm"),
         verify=verify,
+        control_methods=methods,
+        planner_visible=visible,
+        aliases=alias_t,
     )
+    for a in alias_t:
+        if a and a != name:
+            _ALIASES[a] = name
+
+
+def _infer_type_label(hint: str) -> str:
+    h = (hint or "").lower()
+    if "int" in h:
+        return "int"
+    if "float" in h or "number" in h:
+        return "float"
+    if "bool" in h:
+        return "bool"
+    if "str" in h or "path" in h or "url" in h or "name" in h:
+        return "str"
+    return "any"
+
+
+def resolve_name(name: str) -> str:
+    """Map alias → canonical registered name."""
+    n = (name or "").strip()
+    if not n:
+        return n
+    return _ALIASES.get(n, n)
 
 
 def get(name: str) -> ToolSpec | None:
     ensure_bootstrapped()
-    return _REGISTRY.get(name)
+    canon = resolve_name(name)
+    return _REGISTRY.get(canon) or _REGISTRY.get(name)
+
+
+def is_registered(name: str) -> bool:
+    return get(name) is not None
 
 
 def all_tools() -> list[ToolSpec]:
@@ -64,19 +162,121 @@ def names() -> list[str]:
     return sorted(_REGISTRY.keys())
 
 
+def validate_args(
+    name: str, args: dict | None = None
+) -> tuple[bool, str, dict[str, Any]]:
+    """
+    Validate / coerce arguments against the tool's typed param schema.
+
+    Returns (ok, error_message, coerced_args).
+    Unknown tools → ok=False.
+    """
+    ensure_bootstrapped()
+    spec = get(name)
+    if not spec:
+        return False, f"Unknown tool: {name}", {}
+    raw = dict(args or {})
+    params = spec.params or {}
+    if not params:
+        return True, "", raw
+
+    coerced: dict[str, Any] = dict(raw)
+    # Map aliases → canonical keys
+    for key, meta in params.items():
+        if key in coerced and coerced[key] not in (None, ""):
+            continue
+        for a in meta.get("aliases") or ():
+            if a in raw and raw[a] not in (None, ""):
+                coerced[key] = raw[a]
+                break
+    # Required
+    for key, meta in params.items():
+        if not meta.get("required"):
+            continue
+        if key not in coerced or coerced[key] in (None, ""):
+            return False, f"Missing required argument '{key}' for {spec.name}", raw
+
+    # Type coerce known params
+    for key, meta in params.items():
+        if key not in coerced or coerced[key] is None or coerced[key] == "":
+            continue
+        t = (meta.get("type") or "any").lower()
+        val = coerced[key]
+        try:
+            if t == "int":
+                coerced[key] = int(val)
+            elif t == "float":
+                coerced[key] = float(val)
+            elif t == "bool":
+                if isinstance(val, bool):
+                    pass
+                elif str(val).strip().lower() in ("1", "true", "yes", "on"):
+                    coerced[key] = True
+                elif str(val).strip().lower() in ("0", "false", "no", "off"):
+                    coerced[key] = False
+                else:
+                    return False, f"Invalid bool for '{key}': {val!r}", raw
+            elif t == "str":
+                coerced[key] = str(val)
+        except (TypeError, ValueError):
+            return False, f"Invalid {t} for '{key}': {val!r}", raw
+    return True, "", coerced
+
+
+def execute(
+    name: str,
+    args: dict | None = None,
+    *,
+    confirmed: bool = False,
+    skip_policy: bool = False,
+) -> Any:
+    """
+    Run a registered tool only. Raises ValueError for unknown / invalid args.
+    Does not allow arbitrary Python or shell outside registered handlers.
+    """
+    ensure_bootstrapped()
+    spec = get(name)
+    if not spec:
+        raise ValueError(f"Unknown tool: {name} (only registered tools may execute)")
+    ok, err, coerced = validate_args(spec.name, args)
+    if not ok:
+        raise ValueError(err or f"Invalid arguments for {name}")
+    if not skip_policy:
+        try:
+            from neuron.safety import policy
+            allowed, reason = policy.allow(
+                spec.name, coerced, confirmed=confirmed or bool(coerced.get("confirmed"))
+            )
+            if not allowed:
+                raise PermissionError(reason or f"Not allowed: {spec.name}")
+        except PermissionError:
+            raise
+        except Exception:
+            pass
+    return spec.handler(coerced)
+
+
 def tools_doc(limit: int = 80) -> str:
     """Compact card for the LLM planner — single source of truth."""
     ensure_bootstrapped()
     lines = [
         "TOOLS (call with {\"tool\":\"name\",\"arguments\":{...}}):",
         "Prefer structured tools. Coordinate mouse is LAST resort.",
+        "Only registered tools below may execute. No shell/Python/eval.",
     ]
-    for spec in sorted(_REGISTRY.values(), key=lambda s: s.name)[:limit]:
+    visible = [
+        s for s in sorted(_REGISTRY.values(), key=lambda s: s.name)
+        if s.planner_visible and s.name not in _PLANNER_HIDDEN
+    ]
+    for spec in visible[:limit]:
         args = ",".join(f"{k}:{v}" for k, v in (spec.args_schema or {}).items()) if spec.args_schema else ""
         bit = "{" + args + "}" if args else "{}"
-        lines.append(f"- {spec.name}{bit} risk={spec.risk} — {spec.description}")
+        methods = (" methods=" + "+".join(spec.control_methods)) if spec.control_methods else ""
+        lines.append(
+            f"- {spec.name}{bit} risk={spec.risk}{methods} — {spec.description}"
+        )
     lines.append(
-        "HIERARCHY: direct API/deep-link → UI Automation → browser DOM → OCR → vision → coords."
+        "HIERARCHY: API/CLI → browser DOM → UI Automation → OCR → vision → coords."
     )
     lines.append(
         'Examples: browser_search{"site":"youtube","query":"ue5"} → browser_click first result | '
@@ -119,6 +319,7 @@ def ensure_bootstrapped() -> None:
     _bootstrap_new()
     _bootstrap_skills()
     _bootstrap_procedures()
+    _bootstrap_v35_primitives()
 
 
 def _bootstrap_skills() -> None:
@@ -278,7 +479,7 @@ def _bootstrap_new() -> None:
         ("browser_switch_tab", browser_tools.browser_switch_tab, "Switch to tab by index", {"index": "int"}, True),
         ("browser_close_tab", browser_tools.browser_close_tab, "Close tab (current or index)", {"index": "int"}, True),
         ("browser_research", browser_tools.browser_research, "Search + open pages + summarize (sources in state)", {"query": "str", "site": "str"}, True),
-        ("run_powershell", shell_tools.run_powershell, "Validated PowerShell only", {"command": "str"}, False),
+        ("run_powershell", shell_tools.run_powershell, "Validated PowerShell only (not for LLM planner)", {"command": "str"}, False),
         ("web_search_summarize", web_tools.web_search_summarize, "HTTP scrape search + local summarize", {"query": "str"}, False),
     ]
     for name, fn, desc, schema, overwrite in extras:
@@ -292,10 +493,282 @@ def _bootstrap_new() -> None:
             args_schema=schema,
             risk=DEFAULT_RISK.get(name, "safe"),
             overwrite=overwrite,
+            planner_visible=(name not in _PLANNER_HIDDEN),
+            control_methods=_default_methods(name),
         )
+
+
+def _default_methods(name: str) -> list[str]:
+    n = name or ""
+    if n.startswith("browser_") or n in ("open_website", "search_web", "search_site"):
+        return ["dom", "playwright"]
+    if n in (
+        "open_app", "close_app", "focus_app", "move_window", "move_window_to_monitor",
+        "get_windows", "get_active_window", "minimize_app", "maximize_app",
+        "click_ui_element", "find_ui_element", "get_ui_tree", "get_active_window_elements",
+    ):
+        return ["uia", "api"]
+    if n in ("open_file", "open_folder", "search_files", "create_file", "create_folder"):
+        return ["filesystem"]
+    if n in ("click_element", "find_element"):
+        return ["dom", "uia", "ocr", "perception", "coords"]
+    if n in ("analyze_screen", "get_screen_context", "ocr_screen", "ocr_image"):
+        return ["uia", "ocr", "perception"]
+    if n in ("type_text", "press_key", "hotkey", "scroll", "click", "press_keys"):
+        return ["input"]
+    if n in ("volume", "media", "wait"):
+        return ["api"]
+    if n in ("run_shell", "run_powershell"):
+        return ["cli"]
+    return []
+
+
+def _bootstrap_v35_primitives() -> None:
+    """Ensure V3.5 canonical primitives exist as aliases / thin wrappers over existing actions."""
+    from neuron.windows.result import ok as _ok, fail as _fail
+
+    # Hide shell tools from planner after legacy bootstrap
+    for hidden in _PLANNER_HIDDEN:
+        spec = _REGISTRY.get(hidden)
+        if spec:
+            spec.planner_visible = False
+
+    # --- speak ---
+    def _speak(args: dict | None = None):
+        args = args or {}
+        text = (args.get("text") or args.get("say") or args.get("message") or "").strip()
+        if not text:
+            return _fail("Need text to speak.", method="speak")
+        try:
+            import memory
+            memory.log("neuron", text)
+        except Exception:
+            pass
+        return _ok(text, state={"spoken": text}, method="speak")
+
+    register(
+        "speak",
+        _speak,
+        description="Speak / surface a short reply to the user",
+        params={
+            "text": {"type": "str", "required": True, "description": "utterance", "aliases": ("say", "message")},
+        },
+        risk="safe",
+        control_methods=["api"],
+        overwrite=True,
+    )
+
+    # --- wait (ensure typed schema) ---
+    def _wait(args: dict | None = None):
+        args = args or {}
+        try:
+            import actions
+            sec = float(args.get("seconds", args.get("sec", 1)) or 1)
+            return actions.wait(sec)
+        except Exception as exc:
+            return f"Wait failed: {exc}"
+
+    if "wait" not in _REGISTRY:
+        register(
+            "wait",
+            _wait,
+            description="Pause briefly before the next step",
+            params={"seconds": {"type": "float", "required": False, "description": "seconds to wait"}},
+            risk="safe",
+            control_methods=["api"],
+        )
+    else:
+        # Enrich schema without replacing handler
+        spec = _REGISTRY["wait"]
+        if not spec.params:
+            spec.params = {"seconds": {"type": "float", "required": False}}
+        if not spec.control_methods:
+            spec.control_methods = ["api"]
+
+    # --- verify ---
+    def _verify(args: dict | None = None):
+        args = args or {}
+        expect = (args.get("expect") or args.get("expected") or args.get("goal") or "").strip()
+        try:
+            from neuron.brain.computer_state import capture
+            cs = capture(deep=False, remember=False)
+            blob = ""
+            if hasattr(cs, "looking_at"):
+                blob = f"{cs.looking_at()} {getattr(cs, 'focused_window_title', '')} {getattr(cs, 'browser_url', '')}"
+            else:
+                blob = str(cs)
+            if expect and expect.lower() not in blob.lower():
+                return _fail(
+                    f"Not verified (want '{expect}'). Seeing: {blob[:120]}",
+                    state={"expect": expect, "observed": blob[:300]},
+                    method="verify",
+                )
+            return _ok(
+                f"Verified{': ' + expect if expect else ''}.",
+                state={"expect": expect, "observed": blob[:300], "verified": True},
+                method="verify",
+            )
+        except Exception as exc:
+            return _fail(f"Verify failed: {exc}", method="verify")
+
+    register(
+        "verify",
+        _verify,
+        description="Check current computer state against an expectation",
+        params={"expect": {"type": "str", "required": False, "aliases": ("expected", "goal")}},
+        risk="safe",
+        control_methods=["api", "uia"],
+        overwrite=True,
+    )
+
+    # --- click primitive: semantic name → Element Resolver; else last-resort coords/button ---
+    def _click(args: dict | None = None):
+        args = dict(args or {})
+        if args.get("name") or args.get("text") or args.get("query") or args.get("index") is not None:
+            from neuron.tools import uia_tools
+            return uia_tools.click_element(args)
+        if args.get("x") is not None and args.get("y") is not None:
+            try:
+                import pyautogui
+                pyautogui.click(int(args["x"]), int(args["y"]))
+                return _ok(f"Clicked at ({args['x']},{args['y']}).", method="coords")
+            except Exception as exc:
+                return _fail(str(exc), method="coords")
+        from neuron.tools import input_tools
+        return input_tools.click(args)
+
+    register(
+        "click",
+        _click,
+        description="Click: semantic element (preferred) or x,y last resort",
+        params={
+            "name": {"type": "str", "required": False},
+            "index": {"type": "int", "required": False},
+            "x": {"type": "int", "required": False},
+            "y": {"type": "int", "required": False},
+        },
+        risk="safe",
+        control_methods=["dom", "uia", "ocr", "perception", "coords"],
+        overwrite=True,
+    )
+
+    # Canonical aliases → existing tools (handlers shared via resolve_name)
+    alias_map = {
+        "focus_window": "focus_app",
+        "open_url": "browser_navigate",
+        "read_page": "browser_read_page",
+        "find_file": "search_files",
+        "inspect_screen": "analyze_screen",
+    }
+    for alias, target in alias_map.items():
+        _ALIASES[alias] = target
+        # Also register alias name as a visible synonym entry pointing at same handler
+        target_spec = _REGISTRY.get(target)
+        if target_spec and alias not in _REGISTRY:
+            register(
+                alias,
+                target_spec.handler,
+                description=f"Alias of {target}: {target_spec.description}",
+                args_schema=dict(target_spec.args_schema),
+                params=dict(target_spec.params),
+                risk=target_spec.risk,
+                control_methods=list(target_spec.control_methods),
+                planner_visible=True,
+                overwrite=True,
+            )
+
+    # Enrich core primitives with required-param schemas where missing
+    enrich = {
+        "open_app": {
+            "params": {"name": {"type": "str", "required": True, "aliases": ("application", "app")}},
+            "methods": ["api", "uia"],
+        },
+        "close_app": {
+            "params": {"name": {"type": "str", "required": True}},
+            "methods": ["api", "uia"],
+        },
+        "focus_app": {
+            "params": {"name": {"type": "str", "required": True}},
+            "methods": ["api", "uia"],
+        },
+        "move_window": {
+            "params": {
+                "title": {"type": "str", "required": False},
+                "monitor": {"type": "str", "required": False},
+                "x": {"type": "int", "required": False},
+                "y": {"type": "int", "required": False},
+            },
+            "methods": ["api", "uia"],
+        },
+        "type_text": {
+            "params": {"text": {"type": "str", "required": True}},
+            "methods": ["input"],
+        },
+        "press_key": {
+            "params": {"key": {"type": "str", "required": True}},
+            "methods": ["input"],
+        },
+        "hotkey": {
+            "params": {"keys": {"type": "str", "required": True}},
+            "methods": ["input"],
+        },
+        "scroll": {
+            "params": {"direction": {"type": "str", "required": False}},
+            "methods": ["input", "dom"],
+        },
+        "browser_search": {
+            "params": {
+                "query": {"type": "str", "required": True},
+                "site": {"type": "str", "required": False},
+            },
+            "methods": ["dom", "playwright"],
+        },
+        "browser_navigate": {
+            "params": {"url": {"type": "str", "required": True, "aliases": ("site",)}},
+            "methods": ["dom", "playwright"],
+        },
+        "open_file": {
+            "params": {"path": {"type": "str", "required": True}},
+            "methods": ["filesystem"],
+        },
+        "search_files": {
+            "params": {"query": {"type": "str", "required": True}},
+            "methods": ["filesystem"],
+        },
+        "find_element": {
+            "params": {"name": {"type": "str", "required": True}},
+            "methods": ["dom", "uia", "ocr"],
+        },
+        "click_element": {
+            "params": {
+                "name": {"type": "str", "required": False},
+                "index": {"type": "int", "required": False},
+            },
+            "methods": ["dom", "uia", "ocr", "perception", "coords"],
+        },
+        "volume": {
+            "params": {"action": {"type": "str", "required": False}},
+            "methods": ["api"],
+        },
+    }
+    for name, meta in enrich.items():
+        spec = _REGISTRY.get(name)
+        if not spec:
+            continue
+        if meta.get("params"):
+            merged = dict(spec.params or {})
+            merged.update(meta["params"])
+            spec.params = merged
+            if not spec.args_schema:
+                spec.args_schema = {
+                    k: v.get("type", "any") for k, v in merged.items()
+                }
+        if meta.get("methods") and not spec.control_methods:
+            spec.control_methods = list(meta["methods"])
 
 
 def reset_for_tests() -> None:
     global _BOOTSTRAPPED
     _REGISTRY.clear()
     _BOOTSTRAPPED = False
+    # Keep canonical alias table; per-tool aliases re-added on bootstrap

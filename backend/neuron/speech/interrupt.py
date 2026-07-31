@@ -19,8 +19,8 @@ from typing import Callable
 # Explicit stop / barge-in phrases (not "stop the video", "stop recording").
 STOP_RE = re.compile(
     r"(?:"
-    r"\b(?:hey\s+)?(?:neuron|jarvis)[,.]?\s+stop\b"
-    r"|\bstop[,.]?\s+(?:neuron|jarvis)\b"
+    r"\b(?:hey\s+)?(?:neuron|jarvis)[,.]?\s+(?:stop|cancel)\b"
+    r"|\b(?:stop|cancel)[,.]?\s+(?:neuron|jarvis)\b"
     r"|\bstop\s+talking\b"
     r"|\bstop\s+speaking\b"
     r"|\bbe\s+quiet\b"
@@ -29,9 +29,10 @@ STOP_RE = re.compile(
     r"|\bhalt\b"
     r"|\babort\b"
     r"|\bcancel\s+that\b"
+    r"|\bcancel\s+(?:it|this|the\s+task|the\s+operation)\b"
     r"|\bnever\s*mind\b"
     r"|\bcut\s+it\s+out\b"
-    r"|(?:^|\b)(?:please\s+)?stop(?:\s+please)?[.!]?$"
+    r"|(?:^|\b)(?:please\s+)?(?:stop|cancel)(?:\s+please)?[.!]?$"
     r")",
     re.I,
 )

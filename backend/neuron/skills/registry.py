@@ -56,6 +56,10 @@ SKILL_SPECS: list[tuple[str, Handler, str, dict, str]] = [
     ("blender.focus", blender.focus_tool, "Focus Blender window", {}, "safe"),
     ("blender.open_project", blender.open_project_tool, "Open a .blend project by path or name", {"path": "str", "query": "str"}, "safe"),
     ("blender.new_file", blender.new_file_tool, "New Blender file (Ctrl+N)", {}, "safe"),
+    ("blender.wait_for_app", blender.wait_for_app_tool, "Wait until Blender is ready", {"timeout": "float"}, "safe"),
+    ("blender.trigger_render", blender.trigger_render_tool, "Trigger Blender render (F12)", {}, "safe"),
+    ("blender.verify_render", blender.verify_render_tool, "Verify render UI started", {}, "safe"),
+    ("blender.start_render", blender.start_render_tool, "Open project (optional) and start render", {"project": "str", "path": "str"}, "safe"),
 ]
 
 
@@ -104,6 +108,6 @@ def skill_prompt(max_lines: int = 40) -> str:
         "spotify.play{query?} | spotify.pause{} | spotify.search{query}",
         "discord.open_channel{channel|guild_id,channel_id} | discord.friends{}",
         "files.find{query} | files.open{path|query} | files.open_folder{location}",
-        "blender.open_project{path|query} | blender.open{}",
+        "blender.open_project{path|query} | blender.start_render{project?} | blender.open{}",
     ]
     return "\n".join(lines[:max_lines])

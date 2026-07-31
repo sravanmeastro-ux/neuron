@@ -11,39 +11,77 @@ def deterministic_recovery(
     failed_step: dict,
     error: str,
     goal: GoalState,
+    category: str | None = None,
 ) -> list[dict] | None:
     """
     Try another valid method for the failed step.
-    Returns replacement steps for the failed step only (not the whole goal),
-    or None to fall through to LLM replan.
+
+    Prefer structured `category` (V3.7) over error-string heuristics.
+    Returns replacement steps for the failed step only, or None to replan.
     """
     action = (failed_step.get("action") or "").strip()
     args = dict(failed_step.get("args") or {})
     err = (error or "").lower()
+    cat = (category or "").strip().upper()
     tried = {(h.get("action"), str(h.get("args"))) for h in goal.action_history}
 
     def unused(step: dict) -> bool:
         key = (step.get("action"), str(step.get("args") or {}))
         return key not in tried
 
+    # Terminal / ask-user categories — no deterministic steps
+    if cat in ("POLICY_BLOCKED", "INTERRUPTED", "PERMISSION_REQUIRED", "AMBIGUOUS_TARGET"):
+        return None
+
+    # --- Category-first recoveries (work for any action) ---
+    cat_steps = _recovery_for_category(cat, failed_step, args, unused)
+    if cat_steps is not None:
+        return cat_steps
+
+    # Fallback: keyword heuristics when category unknown / empty
+    if not cat or cat == "UNKNOWN":
+        if "popup" in err or "dialog" in err or "cookie" in err or "consent" in err:
+            cat_steps = _recovery_for_category("POPUP_DETECTED", failed_step, args, unused)
+            if cat_steps:
+                return cat_steps
+        if "focus" in err or "wrong window" in err or "not focused" in err:
+            cat_steps = _recovery_for_category(
+                "FOCUS_LOST" if "focus" in err else "WRONG_WINDOW",
+                failed_step,
+                args,
+                unused,
+            )
+            if cat_steps:
+                return cat_steps
+        if "monitor" in err or "wrong monitor" in err:
+            cat_steps = _recovery_for_category("WRONG_MONITOR", failed_step, args, unused)
+            if cat_steps:
+                return cat_steps
+        if "timeout" in err or "timed out" in err:
+            cat_steps = _recovery_for_category("ACTION_TIMEOUT", failed_step, args, unused)
+            if cat_steps:
+                return cat_steps
+        if "page" in err and ("load" in err or "blank" in err):
+            cat_steps = _recovery_for_category("PAGE_NOT_LOADED", failed_step, args, unused)
+            if cat_steps:
+                return cat_steps
+
+    # --- Action-specific alternate methods ---
     alts: list[dict] = []
 
-    if action in ("open_app", "focus_app"):
+    if action in ("open_app", "focus_app", "launch_app"):
         name = (args.get("name") or args.get("application") or "").strip()
         if not name:
             return None
-        # 1) Focus if process may already be up
         cand = {"action": "focus_app", "args": {"name": name}}
         if unused(cand):
             alts.append(cand)
-        # 2) Re-open with longer wait
         cand2 = {
             "action": "open_app",
             "args": {"name": name, "wait_seconds": 20, "auto_learn": True},
         }
         if unused(cand2):
             alts.append(cand2)
-        # 3) Shell Start Menu style via type_text path is too risky — skip
         return alts[:2] or None
 
     if action in ("browser_click", "browser_find_element"):
@@ -73,7 +111,6 @@ def deterministic_recovery(
                 alts.append(find)
             if unused(click):
                 alts.append(click)
-            # Legacy aliases
             find_u = {"action": "find_ui_element", "args": {"name": name}}
             click_u = {"action": "click_ui_element", "args": {"name": name}}
             if unused(find_u):
@@ -100,6 +137,133 @@ def deterministic_recovery(
             alt = {"action": "browser_search", "args": {"site": site, "query": query}}
             if unused(alt):
                 return [alt]
+
+    # skip_ad failed (button not ready yet) → wait + retry skip_ad.
+    # NEVER recover with page_scroll — that caused the "scrolling up and down" bug.
+    if action in ("skip_ad", "youtube.skip_ad", "youtube_skip_ad"):
+        wait = {"action": "wait", "args": {"seconds": 2}}
+        retry = {
+            "action": "skip_ad",
+            "args": {},
+            "expected_result": "ad skipped or no ad showing",
+        }
+        out = []
+        if unused(wait):
+            out.append(wait)
+        if unused(retry):
+            out.append(retry)
+        return out or None
+
+    return None
+
+
+def _recovery_for_category(
+    cat: str,
+    failed_step: dict,
+    args: dict,
+    unused,
+) -> list[dict] | None:
+    """Structured recovery steps keyed by failure category."""
+    name = (
+        args.get("name")
+        or args.get("title")
+        or args.get("app")
+        or args.get("application")
+        or ""
+    )
+    name = str(name).strip()
+
+    if cat == "POPUP_DETECTED":
+        esc = {"action": "press_keys", "args": {"keys": "esc"}}
+        out: list[dict] = []
+        if unused(esc):
+            out.append(esc)
+        out.append(dict(failed_step))
+        return out
+
+    if cat in ("FOCUS_LOST", "WRONG_WINDOW"):
+        if name:
+            cand = {"action": "focus_app", "args": {"name": name}}
+            if unused(cand):
+                return [cand, dict(failed_step)]
+        # Generic: Alt+Tab won't help reliably — wait then retry
+        wait = {"action": "wait", "args": {"seconds": 0.5}}
+        out = []
+        if unused(wait):
+            out.append(wait)
+        out.append(dict(failed_step))
+        return out
+
+    if cat == "WRONG_MONITOR":
+        mon = args.get("monitor") or args.get("monitor_id") or "other"
+        if name:
+            cand = {
+                "action": "move_window_to_monitor",
+                "args": {"name": name, "monitor": mon},
+            }
+            if unused(cand):
+                return [cand, dict(failed_step)]
+        # Same move already attempted — defer to loop same-step retry
+        return None
+
+    if cat == "ACTION_TIMEOUT":
+        wait = {"action": "wait", "args": {"seconds": 1.5}}
+        out = []
+        if unused(wait):
+            out.append(wait)
+        out.append(dict(failed_step))
+        return out
+
+    if cat == "PAGE_NOT_LOADED":
+        wait = {"action": "wait", "args": {"seconds": 2}}
+        out = []
+        if unused(wait):
+            out.append(wait)
+        out.append(dict(failed_step))
+        return out
+
+    if cat == "WINDOW_NOT_FOUND":
+        if name:
+            focus = {"action": "focus_app", "args": {"name": name}}
+            open_ = {
+                "action": "open_app",
+                "args": {"name": name, "wait_seconds": 15, "auto_learn": True},
+            }
+            out = []
+            if unused(focus):
+                out.append(focus)
+            if unused(open_):
+                out.append(open_)
+            return out[:2] or None
+        return None
+
+    if cat == "APP_NOT_RUNNING":
+        if name:
+            focus = {"action": "focus_app", "args": {"name": name}}
+            open_ = {
+                "action": "open_app",
+                "args": {"name": name, "wait_seconds": 20, "auto_learn": True},
+            }
+            out = []
+            # Prefer focus (process may already be up), then re-open with longer wait
+            if unused(focus):
+                out.append(focus)
+            if unused(open_):
+                out.append(open_)
+            return out[:2] or None
+        return None
+
+    if cat == "ELEMENT_NOT_FOUND":
+        # Let action-specific path below handle click/find alts
+        return None
+
+    if cat == "VERIFICATION_FAILED":
+        wait = {"action": "wait", "args": {"seconds": 1.0}}
+        out = []
+        if unused(wait):
+            out.append(wait)
+        out.append(dict(failed_step))
+        return out
 
     return None
 
