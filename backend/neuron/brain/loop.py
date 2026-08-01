@@ -86,6 +86,13 @@ def run_opavr(
     strict = bool(cfg.get("strict_verify", True))
     verify_final = bool(cfg.get("verify_final_goal", True))
 
+    # Fresh recovery budget per command (avoid leaked cancel/exhaust from prior runs)
+    try:
+        from neuron.v4.recover import reset_recovery_engine
+        reset_recovery_engine()
+    except Exception:
+        pass
+
     tr = trace or Trace()
     meta: dict[str, Any] = {
         "path": "opavr",
@@ -98,6 +105,7 @@ def run_opavr(
         "needs_confirm": None,
         "diagnoses": [],
         "recovery_decisions": [],
+        "world_model": True,
     }
 
     goal_text = (normalized or request or "").strip()
@@ -107,6 +115,16 @@ def run_opavr(
 
     # V3.7 UNDERSTAND — capture goal text (Intent already done upstream)
     meta["understood_goal"] = goal_text
+
+    # V4.1 DesktopWorldModel — task-scoped snapshots (does not replace ContextEngine)
+    try:
+        from neuron.v4.world import get_world_model
+        import hashlib
+        tid = hashlib.sha1(goal_text.encode("utf-8", "replace")).hexdigest()[:10]
+        get_world_model().set_task_id(tid)
+        meta["task_id"] = tid
+    except Exception:
+        pass
 
     # V3 ContextEngine — load session context; start task lifecycle
     try:
@@ -249,6 +267,34 @@ def run_opavr(
         world_before = verifier.observe_world(hint, step=step)
         goal.update_observation(world_before, note="pre-act")
         tr.observe(world_before, note="pre-act")
+        try:
+            from neuron.v4.world import get_world_model
+            from neuron.v4.perception import get_perception_engine
+            wm = get_world_model()
+            # V4.2: normalize observe_world → stable IDs + screen_diff → world model
+            # (avoids a second full desktop scan; full pe.observe() remains available)
+            pres = get_perception_engine().normalize_into_world(
+                world_before, world=wm, push_world=True
+            )
+            meta["world_before_fp"] = wm.current.ensure_fingerprint()
+            meta["world_active_app"] = wm.get_active_application()
+            meta["world_active_monitor"] = wm.current.active_monitor_id
+            meta["perception_confidence"] = pres.confidence
+            meta["perception_sources"] = list(pres.sources_used)
+            if pres.screen_diff:
+                meta["world_diff_pre"] = pres.screen_diff.to_dict()
+            if world_before.get("ui_change") is None and pres.screen_diff:
+                world_before["ui_change"] = pres.screen_diff.to_dict()
+                world_before["ui_changed"] = pres.screen_diff.changed
+        except Exception as exc:
+            print(f"[opavr] world model pre-act: {exc}", flush=True)
+            try:
+                from neuron.v4.world import get_world_model
+                wm = get_world_model()
+                wm.update_from_observe_dict(world_before, push_previous=True)
+                meta["world_before_fp"] = wm.current.ensure_fingerprint()
+            except Exception:
+                pass
         if world_before.get("ui_change"):
             tr.diagnose({"ui_change_pre": world_before.get("ui_change")})
         try:
@@ -373,6 +419,27 @@ def run_opavr(
         goal.update_observation(world_after, note="post-act")
         tr.observe(world_after, note="post-act")
         try:
+            from neuron.v4.world import get_world_model
+            from neuron.v4.perception import get_perception_engine
+            wm = get_world_model()
+            pres = get_perception_engine().normalize_into_world(
+                world_after, world=wm, push_world=True
+            )
+            wm.record_interaction(
+                str(entry.get("action") or step.get("action") or ""),
+                result=str(entry.get("out") or ""),
+                ok=bool(act_ok),
+                args=entry.get("args") if isinstance(entry.get("args"), dict) else {},
+            )
+            meta["world_after_fp"] = wm.current.ensure_fingerprint()
+            meta["world_diff"] = (
+                pres.screen_diff.to_dict() if pres.screen_diff else wm.diff_snapshots()
+            )
+            meta["perception_confidence"] = pres.confidence
+            meta["perception_timing_ms"] = dict(pres.timing_ms)
+        except Exception as exc:
+            print(f"[opavr] world model post-act: {exc}", flush=True)
+        try:
             from neuron.memory import scopes
             app = world_after.get("app") or world_after.get("active_application")
             if app:
@@ -380,7 +447,111 @@ def run_opavr(
             scopes.working().sync_goal_state(goal)
         except Exception:
             pass
-        vr = verifier.verify_execution_step(step, entry, strict=strict)
+        legacy_vr = verifier.verify_execution_step(step, entry, strict=strict)
+        vr = legacy_vr
+        # V4.5: authoritative VerificationEngine (world before/after). Soft legacy ≠ SUCCESS.
+        v4_report = None
+        try:
+            from neuron.v4.verify import get_verification_engine
+
+            eng = get_verification_engine()
+            world_model = None
+            try:
+                from neuron.v4.world import get_world_model
+                world_model = get_world_model()
+            except Exception:
+                world_model = None
+            screen_diff = meta.get("world_diff")
+            v4_report = eng.verify_step(
+                step,
+                world_before=None,
+                world=world_model,
+                screen_diff=screen_diff,
+                action_result=entry,
+                task_id=str(getattr(goal, "id", "") or getattr(goal, "goal_id", "") or ""),
+                wait=bool(_cfg().get("v4_verify_wait", False)),
+                use_legacy=False,
+            )
+            meta["verification_v4"] = v4_report.to_dict()
+            not_obs = bool(
+                v4_report.expectation
+                and (v4_report.expectation.params or {}).get("not_observable")
+            )
+            use_v4 = bool(_cfg().get("v4_verify_authoritative", True)) and not not_obs
+            if use_v4:
+                from neuron.v4.types import VerificationOutcome
+
+                class _VR:
+                    pass
+
+                _bridge = _VR()
+                st = v4_report.status
+                if st is VerificationOutcome.SUCCESS:
+                    _bridge.ok = True
+                    _bridge.note = v4_report.reason or legacy_vr.note
+                elif st is VerificationOutcome.FAILURE:
+                    facts = v4_report.evidence.facts if v4_report.evidence else {}
+                    note_l = str(legacy_vr.note or "").lower()
+                    soft = any(
+                        m in note_l
+                        for m in (
+                            "soft-accept", "soft-ok", "verify skipped", "deferred",
+                            "no contradiction", "no screen text", "accepted against observation",
+                        )
+                    )
+                    active = str(facts.get("active_application") or "").strip().lower()
+                    # Mock/sparse harness worlds: V4 FAILURE can be over-confident vs patched legacy.
+                    mockish = active in ("mock", "", "?", "unknown") and not facts.get("window_hwnd")
+                    if legacy_vr.ok and not soft and mockish:
+                        _bridge.ok = True
+                        _bridge.note = legacy_vr.note or v4_report.reason
+                        meta["v4_fail_deferred_mock_world"] = True
+                    else:
+                        _bridge.ok = False
+                        _bridge.note = (
+                            legacy_vr.note if not legacy_vr.ok else (v4_report.reason or legacy_vr.note)
+                        )
+                else:
+                    # UNCERTAIN: never auto-SUCCESS. Defer only to *hard* legacy True
+                    # (tests/recovery with explicit verify notes). Soft-legacy stays blocked.
+                    note_l = str(legacy_vr.note or "").lower()
+                    soft = any(
+                        m in note_l
+                        for m in (
+                            "soft-accept",
+                            "soft-ok",
+                            "verify skipped",
+                            "deferred",
+                            "no contradiction",
+                            "no screen text",
+                            "accepted against observation",
+                        )
+                    )
+                    if legacy_vr.ok and not soft:
+                        _bridge.ok = True
+                        _bridge.note = legacy_vr.note or v4_report.reason
+                        meta["v4_uncertain_deferred_to_legacy_hard"] = True
+                    else:
+                        _bridge.ok = False
+                        # Prefer legacy failure text for recovery classification
+                        _bridge.note = (legacy_vr.note if not legacy_vr.ok else "") or v4_report.reason or legacy_vr.note
+                        if legacy_vr.ok and soft:
+                            meta["legacy_soft_blocked_by_v4"] = True
+                        elif legacy_vr.ok:
+                            meta["legacy_ok_but_v4_uncertain"] = True
+                _bridge.evidence = v4_report.evidence.to_dict()
+                vr = _bridge
+                if legacy_vr.ok and not vr.ok:
+                    meta["legacy_ok_but_v4_not_success"] = True
+            else:
+                if legacy_vr.ok and v4_report and not v4_report.ok_for_advance:
+                    meta["legacy_false_success_risk"] = True
+                if not_obs:
+                    meta["verification_not_observable"] = True
+        except Exception as exc:
+            print(f"[opavr] v4 verify bridge: {exc}", flush=True)
+            meta["verification_v4_error"] = str(exc)[:160]
+
         tr.verification(
             vr.ok,
             vr.note,
@@ -402,6 +573,20 @@ def run_opavr(
                 )
             except Exception:
                 pass
+            try:
+                from neuron.v4.context import on_opavr_verified
+                v4st = meta.get("verification_v4") or {}
+                uncertain = str(v4st.get("status") or "").upper() == "UNCERTAIN"
+                on_opavr_verified(
+                    action=str(entry.get("action") or step.get("action") or ""),
+                    args=entry.get("args") if isinstance(entry.get("args"), dict) else {},
+                    ok=True,
+                    uncertain=uncertain,
+                    observation=world_after if isinstance(world_after, dict) else {},
+                    note=str(vr.note or ""),
+                )
+            except Exception:
+                pass
             continue
 
         # Failure — diagnose → decide → observe again path via next iteration
@@ -418,12 +603,65 @@ def run_opavr(
             )
         except Exception:
             pass
+        try:
+            from neuron.v4.context import on_opavr_verified
+            v4st = meta.get("verification_v4") or {}
+            uncertain = str(v4st.get("status") or "").upper() == "UNCERTAIN"
+            on_opavr_verified(
+                action=str(entry.get("action") or step.get("action") or ""),
+                args=entry.get("args") if isinstance(entry.get("args"), dict) else {},
+                ok=False,
+                uncertain=uncertain,
+                observation=world_after if isinstance(world_after, dict) else {},
+                note=err,
+            )
+        except Exception:
+            pass
         diagnosis = verifier.diagnose_failure(step, err, world_after)
         meta["diagnoses"].append(diagnosis)
         tr.diagnose(diagnosis)
 
+        # V4.6: RecoveryEngine over VerificationReport (typed decision; no second policy)
+        v4_recovery = None
+        try:
+            from neuron.v4.recover import recover_from_verification, decision_to_legacy_steps
+            from neuron.v4.recover.types import RecoveryKind
+            from neuron.v4.verify.types import VerificationReport
+            from neuron.v4.types import VerificationOutcome
+
+            v4_raw = meta.get("verification_v4")
+            report = None
+            if isinstance(v4_raw, dict):
+                st = str(v4_raw.get("status") or "UNCERTAIN")
+                try:
+                    outcome = VerificationOutcome(st)
+                except Exception:
+                    outcome = VerificationOutcome.UNCERTAIN
+                report = VerificationReport(
+                    status=outcome,
+                    reason=str(v4_raw.get("reason") or err),
+                    action_id=str(v4_raw.get("action_id") or ""),
+                    task_id=str(v4_raw.get("task_id") or ""),
+                    confidence=float(v4_raw.get("confidence") or 0.5),
+                )
+            v4_recovery = recover_from_verification(
+                verification=report,
+                step=step,
+                action_result=entry if isinstance(entry, dict) else {},
+                interrupted=bool(entry.get("interrupted")),
+                state_changed=bool((meta.get("world_diff") or {}).get("changed")),
+                legacy_diagnosis=diagnosis if isinstance(diagnosis, dict) else None,
+            )
+            meta["recovery_v4"] = v4_recovery.to_dict()
+        except Exception as exc:
+            print(f"[opavr] v4 recover bridge: {exc}", flush=True)
+            meta["recovery_v4_error"] = str(exc)[:160]
+            v4_recovery = None
+
         # Interrupted mid-step
-        if entry.get("interrupted") or diagnosis.get("category") == "INTERRUPTED":
+        if entry.get("interrupted") or diagnosis.get("category") == "INTERRUPTED" or (
+            v4_recovery and v4_recovery.kind.value == "CANCEL"
+        ):
             goal.status = "interrupted"
             meta["loop_status"] = "INTERRUPTED"
             meta["path"] = "interrupted"
@@ -437,6 +675,34 @@ def run_opavr(
         alt_probe = recover.deterministic_recovery(
             step, err, goal, category=str(diagnosis.get("category") or "")
         ) or []
+        # Prefer V4 recovery steps that are primitives / focus / popup dismiss.
+        # Do NOT inject peer click-tool alternates into OPAVR alt_probe — that
+        # short-circuits V3 deterministic_recovery → llm_replan when empty.
+        if v4_recovery is not None:
+            try:
+                from neuron.v4.recover import decision_to_legacy_steps
+                from neuron.v4.recover.types import RecoveryKind as RK
+                inject = False
+                if v4_recovery.kind in (
+                    RK.FOCUS_THEN_RETRY, RK.WAIT, RK.RETRY, RK.REGROUND, RK.REOBSERVE,
+                ):
+                    inject = True
+                elif v4_recovery.kind is RK.ALTERNATE_TOOL:
+                    tools = {
+                        str(a.tool or "").lower()
+                        for a in (v4_recovery.actions or [])
+                    }
+                    if tools & {
+                        "press_keys", "focus_app", "windows.focus_app", "wait",
+                    } or str(diagnosis.get("category") or "") == "POPUP_DETECTED":
+                        inject = True
+                if inject:
+                    v4_steps = decision_to_legacy_steps(v4_recovery, step)
+                    if v4_steps:
+                        alt_probe = v4_steps + list(alt_probe)
+            except Exception:
+                pass
+
         try:
             from neuron.v3.loop_types import decide_recovery, map_goal_status
             decision = decide_recovery(
@@ -447,6 +713,16 @@ def run_opavr(
                 max_global_retries=max_retries,
                 has_alternate=bool(alt_probe),
             )
+            # Overlay V4 strategy when RecoveryEngine produced a decision
+            if v4_recovery is not None:
+                if v4_recovery.strategy:
+                    decision.strategy = v4_recovery.strategy
+                if v4_recovery.v3_status:
+                    decision.status = v4_recovery.v3_status
+                if v4_recovery.clarify_prompt:
+                    decision.ask_prompt = v4_recovery.clarify_prompt
+                if v4_recovery.reason:
+                    decision.reason = v4_recovery.reason
             meta["recovery_decisions"].append(decision.to_dict())
             meta["loop_status"] = decision.status
         except Exception as exc:
@@ -469,6 +745,22 @@ def run_opavr(
             meta["path"] = "needs_user"
             meta["loop_status"] = "NEEDS_USER"
             meta["steps"] = list(goal.action_history)
+            try:
+                from neuron.v4.context import on_recovery_decision, on_ask_user_clarify
+                if v4_recovery is not None:
+                    on_recovery_decision(
+                        v4_recovery,
+                        goal_text=str(getattr(goal, "text", None) or request or ""),
+                        plan_id="",
+                    )
+                else:
+                    on_ask_user_clarify(
+                        say,
+                        original_goal=str(getattr(goal, "text", None) or request or ""),
+                        source="opavr_recovery",
+                    )
+            except Exception:
+                pass
             _ctx_task_done("needs_user", say)
             return say, True, meta, goal
 

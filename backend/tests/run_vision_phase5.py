@@ -69,7 +69,7 @@ def test_active_window_screenshot():
     path = Path((r.state or {}).get("path") or "")
     assert path.exists()
     title = str(r.state.get("title", "") or "")[:40].encode("ascii", "replace").decode("ascii")
-    print("OK active screenshot", path.name, title)
+    print("OK active screenshot", path.name, title.encode("ascii", "replace").decode("ascii") if isinstance(title, str) else title)
 
 
 def test_pipeline_uia_first_no_vlm():
@@ -83,7 +83,11 @@ def test_pipeline_uia_first_no_vlm():
         )
     assert "vlm" not in ctx.sources
     assert ctx.to_dict()["monitor"] >= 1
-    print("OK pipeline uia-first", ctx.sources, ctx.application[:30] if ctx.application else "")
+    print(
+        "OK pipeline uia-first",
+        ctx.sources,
+        (ctx.application[:30] if ctx.application else "").encode("ascii", "replace").decode("ascii"),
+    )
 
 
 def test_analyze_screen_tool():
@@ -93,7 +97,7 @@ def test_analyze_screen_tool():
         r = analyze_screen({"request": "what is on screen", "use_ocr": False})
     assert r.success
     assert "state" in r.to_dict()
-    print("OK analyze_screen", (r.message or "")[:80].replace("\n", " "))
+    print("OK analyze_screen", (r.message or "")[:80].replace("\n", " ").encode("ascii", "replace").decode("ascii"))
 
 
 def test_ocr_regions_missing_path():

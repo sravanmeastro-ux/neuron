@@ -1,0 +1,66 @@
+{
+  "procedures": [
+    {
+      "id": "learned.youtube_search_workflow",
+      "domain": "learned",
+      "name": "youtube_search_workflow",
+      "say": [
+        "youtube search workflow",
+        "do my youtube search workflow",
+        "run my youtube search workflow"
+      ],
+      "params": [
+        "monitor",
+        "query"
+      ],
+      "steps": [
+        {
+          "action": "windows.open_app",
+          "args": {
+            "name": "Chrome"
+          },
+          "expected_result": "",
+          "capability_id": "windows.open_app"
+        },
+        {
+          "action": "windows.move_to_monitor",
+          "args": {
+            "monitor": "{monitor}"
+          },
+          "expected_result": "",
+          "capability_id": "windows.move_to_monitor"
+        },
+        {
+          "action": "youtube.search",
+          "args": {
+            "query": "{query}"
+          },
+          "expected_result": "",
+          "capability_id": "youtube.search"
+        }
+      ],
+      "builtin": false,
+      "source": "learned",
+      "semantic": true,
+      "enabled": true,
+      "version": 1,
+      "confidence": 0.91,
+      "intent_family": "youtube_search",
+      "risk_summary": "safe",
+      "preconditions": [],
+      "completion_criteria": [
+        "SUCCESS",
+        "SUCCESS",
+        "SUCCESS"
+      ],
+      "meta": {
+        "v4": true,
+        "evidence_count": 3,
+        "attempts": 0,
+        "verified_successes": 0
+      }
+    }
+  ],
+  "schema": 1,
+  "updated": "2026-07-31T20:53:09"
+}

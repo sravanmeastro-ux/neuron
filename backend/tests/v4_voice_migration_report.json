@@ -1,0 +1,144 @@
+{
+  "phase": "V4.10",
+  "ready_for_default": true,
+  "report": {
+    "mock_parity_pass": true,
+    "shadow_parity_pass": true,
+    "live_parity_pass": "PASS",
+    "safety_pass": true,
+    "false_success_pass": true,
+    "recovery_loop_pass": true,
+    "context_pass": true,
+    "latency_pass": true,
+    "canary_sample_count": 20,
+    "live_sample_count": 30,
+    "soak_status": "PASS",
+    "procedure_learning_off": true,
+    "default_still_legacy": true,
+    "ready_for_default": true,
+    "blockers": [],
+    "metrics": {
+      "VOICE_SHADOW_MISMATCH_COUNT": 0,
+      "SHADOW_MUTATION_COUNT": 0,
+      "VOICE_SAFETY_MISMATCH_COUNT": 0,
+      "VOICE_DUPLICATE_EXECUTION_COUNT": 0,
+      "UNVERIFIED_COMPLETION_RESPONSE_COUNT": 0,
+      "LIVE_ATTEMPT_COUNT": 20,
+      "LIVE_VERIFIED_SUCCESS_COUNT": 18,
+      "LIVE_FAILURE_COUNT": 0,
+      "LIVE_UNCERTAIN_COUNT": 2,
+      "LIVE_RECOVERY_COUNT": 2,
+      "LIVE_CONTEXT_MISMATCH_COUNT": 0,
+      "LIVE_DUPLICATE_EXECUTION_COUNT": 0,
+      "LIVE_FALSE_SUCCESS_COUNT": 0,
+      "SOAK": {
+        "LIVE_ATTEMPT_COUNT": 10,
+        "LIVE_VERIFIED_SUCCESS_COUNT": 8,
+        "LIVE_FAILURE_COUNT": 0,
+        "LIVE_UNCERTAIN_COUNT": 2,
+        "LIVE_RECOVERY_COUNT": 2,
+        "LIVE_CONFIRM_COUNT": 0,
+        "LIVE_CANCELLED_COUNT": 0,
+        "mean_latency_ms": 4344.45
+      },
+      "SOAK_STATUS": "PASS",
+      "LATENCY": {
+        "legacy": {
+          "label": "LEGACY",
+          "n": 3,
+          "mean": 4962.06,
+          "median": 4199.11,
+          "p95": 4199.11,
+          "samples": [
+            {
+              "utt": "Open Chrome",
+              "ms": 4199.11,
+              "outcome": "SUCCESS",
+              "path": "capability"
+            },
+            {
+              "utt": "Focus Chrome",
+              "ms": 9711.41,
+              "outcome": "UNCERTAIN",
+              "path": "capability"
+            },
+            {
+              "utt": "Move Chrome to monitor 2",
+              "ms": 975.65,
+              "outcome": "SUCCESS",
+              "path": "capability"
+            }
+          ]
+        },
+        "canary": {
+          "label": "CANARY",
+          "n": 3,
+          "mean": 4225.9,
+          "median": 1914.47,
+          "p95": 1914.47,
+          "samples": [
+            {
+              "utt": "Open Chrome",
+              "ms": 1914.47,
+              "outcome": "SUCCESS",
+              "path": "hierarchical"
+            },
+            {
+              "utt": "Focus Chrome",
+              "ms": 9755.3,
+              "outcome": "UNCERTAIN",
+              "path": "hierarchical"
+            },
+            {
+              "utt": "Move Chrome to monitor 2",
+              "ms": 1007.94,
+              "outcome": "SUCCESS",
+              "path": "hierarchical"
+            }
+          ]
+        },
+        "stt_to_understanding": "NOT_MEASURED",
+        "understanding_to_plan": "NOT_MEASURED_PER_PHASE",
+        "plan_to_first_action": "NOT_MEASURED_SEPARATE",
+        "action_to_verification": "NOT_MEASURED_SEPARATE",
+        "note": "total task latency only (agent.run wall clock)"
+      },
+      "verified_success_rate": 0.9,
+      "voice_config_at_validation": {
+        "hierarchical_voice_enabled": true,
+        "voice_routing_mode": "CANARY",
+        "configured_mode": "CANARY",
+        "procedure_learning_enabled": false
+      },
+      "warnings": [
+        "Focus Chrome UNCERTAIN when Edge/Spotify web holds foreground (honest, both LEGACY and CANARY)",
+        "Phase latency breakdown NOT_MEASURED (total wall-clock only)",
+        "STT latency NOT_MEASURED (transcript injection path)",
+        "Do NOT set voice_routing_mode=HIERARCHICAL without human review"
+      ],
+      "voice_config": {
+        "hierarchical_voice_enabled": false,
+        "voice_routing_mode": "LEGACY",
+        "configured_mode": "LEGACY",
+        "procedure_learning_enabled": false
+      },
+      "generated_at": "2026-07-31T20:51:12",
+      "final_runtime_config": {
+        "hierarchical_voice_enabled": false,
+        "voice_routing_mode": "LEGACY",
+        "configured_mode": "LEGACY",
+        "procedure_learning_enabled": false
+      },
+      "note_final_state": "Restored LEGACY + hierarchical_voice_enabled=false after validation; READY_FOR_DEFAULT was true under measured CANARY gates but default NOT switched"
+    }
+  },
+  "rollback": {
+    "steps": [
+      "Set agent.hierarchical_voice_enabled=false",
+      "Set agent.voice_routing_mode=LEGACY",
+      "Restart server / reload config",
+      "Pending confirmations: say cancel / Neuron stop"
+    ],
+    "note": "Config-only rollback; no code revert required."
+  }
+}

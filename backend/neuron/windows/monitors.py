@@ -472,22 +472,9 @@ def move_window_to_monitor(args: dict | None = None) -> ToolResult:
         or args.get("to")
         or ""
     )
-    # relative_to for "other screen"
-    relative_to = args.get("from_monitor")
-    if relative_to is None and title:
-        # Infer current monitor of the named window
-        for w in _list_windows_with_monitor(mons):
-            if title.lower() in (w.get("title") or "").lower():
-                relative_to = w.get("monitor_id")
-                break
 
-    target = resolve_monitor_ref(ref, relative_to=relative_to, monitors=mons)
-    if not target:
-        return fail(
-            f"Couldn't resolve target monitor '{ref}'.",
-            state={"monitors": mons},
-        )
-
+    # Resolve the window FIRST so "other/secondary" is relative to *that*
+    # window's monitor — not whatever happens to be foreground on the PC.
     hwnd, win = _resolve_window(title)
     if not hwnd:
         return fail(f"Couldn't find window for '{title or 'foreground'}'.")
@@ -500,6 +487,22 @@ def move_window_to_monitor(args: dict | None = None) -> ToolResult:
         mons,
     )
     before_id = int(before_mon["id"]) if before_mon else None
+
+    relative_to = args.get("from_monitor")
+    if relative_to is None:
+        relative_to = before_id
+    if relative_to is None and title:
+        for w in _list_windows_with_monitor(mons):
+            if title.lower() in (w.get("title") or "").lower():
+                relative_to = w.get("monitor_id")
+                break
+
+    target = resolve_monitor_ref(ref, relative_to=relative_to, monitors=mons)
+    if not target:
+        return fail(
+            f"Couldn't resolve target monitor '{ref}'.",
+            state={"monitors": mons},
+        )
 
     # Place inside work area (taskbar-aware), keep size clamped to work area
     ww = max(200, int(win.get("width") or 900))

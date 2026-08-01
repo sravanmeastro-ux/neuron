@@ -10,7 +10,7 @@
   "step_success_rate": 1.0,
   "recovery_success_rate": null,
   "average_retries": 0.0,
-  "average_completion_ms": 6.9,
+  "average_completion_ms": 11.6,
   "planner_failures": 0,
   "perception_failures": 0,
   "execution_failures": 0,

@@ -4,7 +4,7 @@
     {
       "runner": "run_nlu_tests.py",
       "exit": 0,
-      "ms": 50,
+      "ms": 51,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK  'open you tube' -> 'open youtube'\nOK  'minimize the video' -> 'minimize the video'\nOK  'minimize the window' -> 'minimize the window'\nOK  'exit fullscreen' -> 'exit fullscreen'\nOK  'analyze how steam works' -> 'learn how steam works'\nOK  'analyse how chrome works' -> 'learn how chrome works'\n\n=== NLU: 21/21 passed ==="
@@ -12,15 +12,15 @@
     {
       "runner": "run_rules_tests.py",
       "exit": 0,
-      "ms": 1984,
+      "ms": 2728,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[opavr] USER: charge my phone\n[opavr] CONTEXT: app=Google Chrome | window=about:blank - Google Chrome | scene=browser | monitor=1 | browser=? | about:blank | ui=[PaneControl:about:blank - Google Chrome] | text=[about:blank - Google Chrome] | actions=[- _test_fail_tool [FAIL] nope | - windows.get_monitors [ok] Monitors: #1 main/primary/foreground/current/this 1920x1080 @(0,0) | - open_app [ok] ok | - windows.get_monitors [ok] Monitors: #1 main/primary/foreground/current/this 1920x1080 @(0,0) | - _test_fail_tool [FAIL] nope] | chat=[neuron:Whi\n[planner] chat_json failed (rules suite: chat_json mocked offline); falling back to brain_llm.plan\n[planner] plan rejected: empty \ufffd Empty plan with no say\n[opavr] FINAL: {\"status\": \"failed\", \"say\": \"Planner unavailable\"}\n[nlu] 'minimize youtube' -> 'minimize the video'\n\n=== NEURON rules suite: 150/150 passed ==="
+      "tail": "[opavr] USER: charge my phone\n[opavr] CONTEXT: app=Microsoft? Edge | window=that one otter game - Search and 2 more pages - Personal - Microsoft? Edge | scene=browser | monitor=1 | browser=? | about:blank | ui=[PaneControl:that one otter game - Search - Microsoft Edge] | text=[that one otter game - Search - Microsoft Edge] | actions=[- _test_fail_tool [FAIL] nope | - windows.get_monitors [ok] Monitors: #1 main/primary/left/foreground/current/this 1920x1080 @(0,0); #2 seco | - open_app [ok] ok | - _test_fail_tool [FAIL] nope | - windows.open_\n[planner] chat_json failed (rules suite: chat_json mocked offline); falling back to brain_llm.plan\n[planner] plan rejected: empty \ufffd Empty plan with no say\n[opavr] FINAL: {\"status\": \"failed\", \"say\": \"Planner unavailable\"}\n[nlu] 'minimize youtube' -> 'minimize the video'\n\n=== NEURON rules suite: 150/150 passed ==="
     },
     {
       "runner": "run_agent_tests.py",
       "exit": 0,
-      "ms": 744,
+      "ms": 477,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK intent recipe open_app\nOK verifier\nOK sqlite - open_app [ok] ok\n[executor] unknown tool (rejected): not_a_real_tool_zz\nOK executor unknown\nOK normalize aliases\n\n=== agent tests passed ==="
@@ -28,23 +28,23 @@
     {
       "runner": "run_capability_router_tests.py",
       "exit": 0,
-      "ms": 2171,
+      "ms": 2400,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK intent promotion windows.open_app pattern\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\nOK as_plan\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\nOK volume up\nOK choose_control_method filesystem ['api']\n\nALL CapabilityRouter tests passed"
+      "tail": "OK intent promotion windows.open_app pattern\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK as_plan\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK volume up\nOK choose_control_method filesystem ['api']\n\nALL CapabilityRouter tests passed"
     },
     {
       "runner": "run_tool_registry_tests.py",
       "exit": 0,
-      "ms": 1485,
+      "ms": 1625,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK method selection dom filesystem perception dom\nOK click method fallback click_element browser_click\nOK scroll tool browser_scroll\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK aliases\n\nALL V3.5 ToolRegistry / CapabilityRouter tests passed"
+      "tail": "OK method selection dom filesystem perception dom\nOK click method fallback click_element browser_click\nOK scroll tool browser_scroll\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK aliases\n\nALL V3.5 ToolRegistry / CapabilityRouter tests passed"
     },
     {
       "runner": "run_grounded_planner_tests.py",
       "exit": 0,
-      "ms": 1857,
+      "ms": 1835,
       "status": "PASS",
       "known_reason": null,
       "tail": "[opavr] USER: do evil\n[opavr] FINAL: {\"status\": \"failed\", \"say\": \"ok\"}\nOK loop rejects bad prebuilt plan plan_rejected\n[planner] planned 1 steps in 0.00s: [{\"action\": \"open_app\", \"args\": {\"name\": \"Notepad\"}, \"target\": \"Notepad\", \"expected_result\": \"app 'Notepad' is running or has a visible window\", \"timeout\": 45.0, \"retry_limit\": 2}]\n[planner] plan rejected: all_steps_rejected \ufffd Step 0: forbidden tool 'run_shell' (no shell/Python)\nOK mocked LLM validated\n\nALL V3.6 Grounded Planner tests passed"
@@ -52,31 +52,31 @@
     {
       "runner": "run_adaptive_loop_tests.py",
       "exit": 0,
-      "ms": 2828,
+      "ms": 3363,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[opavr] RESULT: {\"ok\": true, \"message\": \"attempted\", \"ms\": null}\n[opavr] OBSERVE: {\"note\": \"post-act\"}\n[opavr] VERIFICATION: {\"ok\": false, \"note\": \"MissingAppXYZ is not running and no window found\", \"expected\": \"app 'MissingAppXYZ' is running or has a visible window\"}\n[opavr] DIAGNOSE: {\"cause\": \"app_not_present\", \"category\": \"APP_NOT_RUNNING\", \"detail\": \"MissingAppXYZ is not running and no window found\", \"action\": \"open_app\", \"target\": \"MissingAppXYZ\", \"expected_result\": \"app 'MissingAppXYZ' is running or has a visible window\", \"strategy\": \"alternate\", \"ask_prompt\": \"\", \"world\": {}}\n[opavr] FINAL: {\"status\": \"failed\", \"say\": \"I couldn't complete: open MissingAppXYZ. Problem: MissingAppXYZ is not running and no window found Still pending: open_app.\", \"cause\": \"app_not_present\"}\nOK bounded retries 3 failed\n\nALL V3.7 adaptive AgentLoop tests passed"
+      "tail": "[opavr] RESULT: {\"ok\": true, \"message\": \"attempted\", \"ms\": null}\n[opavr] OBSERVE: {\"note\": \"post-act\", \"ui_changed\": true, \"ui_change\": \"app: Chrome -> \"}\n[opavr] VERIFICATION: {\"ok\": false, \"note\": \"MissingAppXYZ is not running and no window found\", \"expected\": \"wait completed without error\", \"facts\": {\"changed\": false, \"score\": 0.0}, \"sources\": [\"screen_diff\"], \"conflicts\": [], \"before_fp\": \"\", \"after_fp\": \"0515e985da6b3bfe\", \"summary\": \"changed=False; score=0.0\"}\n[opavr] DIAGNOSE: {\"cause\": \"app_not_present\", \"category\": \"APP_NOT_RUNNING\", \"detail\": \"MissingAppXYZ is not running and no window found\", \"action\": \"wait\", \"target\": \"\", \"expected_result\": \"wait completed without error\", \"strategy\": \"alternate\", \"ask_prompt\": \"\", \"world\": {}}\n[opavr] FINAL: {\"status\": \"failed\", \"say\": \"I couldn't complete: open MissingAppXYZ. Problem: MissingAppXYZ is not running and no window found Still pending: wait, wait, open_app.\", \"cause\": \"app_not_present\"}\nOK bounded retries 3 failed\n\nALL V3.7 adaptive AgentLoop tests passed"
     },
     {
       "runner": "run_v38_multi_monitor_skills_tests.py",
       "exit": 0,
-      "ms": 1548,
+      "ms": 1813,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK adaptive vs coordinate\nOK missing/wrong monitor recovery\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK blender render skills registered\nOK privacy scrub Refusing to learn a procedure that captures passwords or pri\n\nALL V3.8 multi-monitor / multi-app / skills tests passed"
+      "tail": "OK adaptive vs coordinate\nOK missing/wrong monitor recovery\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK blender render skills registered\nOK privacy scrub Refusing to learn a procedure that captures passwords or pri\n\nALL V3.8 multi-monitor / multi-app / skills tests passed"
     },
     {
       "runner": "run_v39_hardening_tests.py",
       "exit": 0,
-      "ms": 474,
+      "ms": 589,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[opavr] OBSERVE: {\"note\": \"post-act\", \"app\": \"mock\", \"scene\": \"desktop\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"mock verify\", \"expected\": \"app 'Blender' is running or has a visible window\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"mock goal\", \"phase\": \"final_goal\"}\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"mock ok focus_app\", \"completed\": 1}\nOK mock recovery measured ok=True recovered=True detail=status=success recovered=True say=mock ok focus_app | matched open_app via open_\nOK backwards compat core ids\n\nALL V3.9 hardening tests passed"
+      "tail": "[opavr] OBSERVE: {\"note\": \"post-act\", \"app\": \"mock\", \"scene\": \"desktop\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"mock verify\", \"expected\": \"Blender open\", \"facts\": {\"world\": \"empty_or_unknown\"}, \"sources\": [\"world\"], \"conflicts\": [], \"before_fp\": \"\", \"after_fp\": \"683dff8af11c5f50\", \"summary\": \"world=empty_or_unknown\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"mock goal\", \"phase\": \"final_goal\"}\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"mock ok open_app\", \"completed\": 2}\nOK mock recovery measured ok=True recovered=True detail=status=success recovered=True say=mock ok open_app | matched open_app via open_a\nOK backwards compat core ids\n\nALL V3.9 hardening tests passed"
     },
     {
       "runner": "run_context_engine_tests.py",
       "exit": 0,
-      "ms": 229,
+      "ms": 199,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK session reset\nOK bounded history 20 30\nOK sensitive filtering\nOK window changed\nOK load_for_command\nOK singleton\n\nALL ContextEngine / WorldState tests passed"
@@ -84,15 +84,15 @@
     {
       "runner": "run_reference_resolver_tests.py",
       "exit": 0,
-      "ms": 666,
+      "ms": 577,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[tools] registered 5 learned/builtin procedures\n[agent] intent kind=llm action='' text='close it'\n[opavr] USER: close it\n[opavr] FINAL: {\"status\": \"ask_user\", \"say\": \"Close which window? I need a clearer target.\"}\n[agent] reference clarify conf=0.25: 'Close which window? I need a clearer target.'\nOK agent clarify ask_user Close which window? I need a clearer target.\n\nALL ReferenceResolver tests passed"
+      "tail": "OK downloaded file open file C:\\Users\\me\\Downloads\\report.pdf\nOK ui candidates Geometry Nodes\nOK passthrough\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK agent clarify ask_user Close which window? I need a clearer target.\n\nALL ReferenceResolver tests passed"
     },
     {
       "runner": "run_perception_engine_tests.py",
       "exit": 0,
-      "ms": 1144,
+      "ms": 1284,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK settings button\nOK blue button\nOK Blender window\nOK perception -> reference Geometry Nodes\nOK wants_ui_candidates gates\nOK semantics before coords\n\nALL PerceptionEngine / ElementResolver tests passed"
@@ -100,15 +100,15 @@
     {
       "runner": "run_brain_phase1.py",
       "exit": 0,
-      "ms": 2060,
+      "ms": 2258,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[opavr] VERIFICATION: {\"ok\": true, \"note\": \"ok; url=youtube\", \"expected\": \"search results for 'Blender fluid simulation tutorials' are visible\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"final goal verified\", \"phase\": \"final_goal\"}\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"Opened YouTube search.\", \"completed\": 1}\n[agent] done path=llm status=success acted=True recovered=False (268ms) say='Opened YouTube search.'\nOK agent youtube search llm Opened YouTube search.\nOK handle_command wired\n\n=== Phase 1 brain tests passed ==="
+      "tail": "[opavr] VERIFICATION: {\"ok\": true, \"note\": \"search URL consistent\", \"expected\": \"search results for 'Blender fluid simulation tutorials' are visible\", \"facts\": {\"url\": \"https://www.youtube.com/results\", \"title\": \"\"}, \"sources\": [\"BROWSER\"], \"conflicts\": [], \"before_fp\": \"\", \"after_fp\": \"637d0d4161629508\", \"summary\": \"url=https://www.youtube.com/results; title=\"}\n[opavr] VERIFICATION: {\"ok\": true, \"note\": \"final goal verified\", \"phase\": \"final_goal\"}\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"Opened YouTube search.\", \"completed\": 1}\n[agent] done path=llm status=success acted=True recovered=False (251ms) say='Opened YouTube search.'\nOK agent youtube search llm Opened YouTube search.\nOK handle_command wired\n\n=== Phase 1 brain tests passed ==="
     },
     {
       "runner": "run_interrupt_tests.py",
       "exit": 0,
-      "ms": 423,
+      "ms": 567,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK executor abort\nOK brain stop\n[interrupt] requested (loop_test) gen=3\n[opavr] USER: get monitors twice\n[opavr] PLAN: {\"say\": \"Checking.\", \"steps\": [{\"action\": \"windows.get_monitors\", \"args\": {}, \"expected_result\": \"windows.get_monitors completed without error\", \"timeout\": 45.0, \"retry_limit\": 2}, {\"action\": \"windows.get_monitors\", \"args\": {}, \"expected_result\": \"windows.get_monitors completed without error\", \"timeout\": 45.0, \"retry_limit\": 2}]}\n[opavr] FINAL: {\"status\": \"interrupted\", \"say\": \"Stopped.\"}\nOK loop interrupt Stopped. interrupted\nALL interrupt tests passed"
@@ -116,15 +116,15 @@
     {
       "runner": "run_safety_phase8.py",
       "exit": 0,
-      "ms": 395,
+      "ms": 453,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK high shell\nOK failsafe\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\n[executor] confirm required (confirm): create_file\nOK executor confirm gate\nOK agent safety regression Blocked dangerous command: rm -rf /\nALL Phase 8 safety tests passed"
+      "tail": "OK high shell\nOK failsafe\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\n[executor] confirm required (confirm): create_file\nOK executor confirm gate\nOK agent safety regression Blocked dangerous command: rm -rf /\nALL Phase 8 safety tests passed"
     },
     {
       "runner": "run_memory_scopes_tests.py",
       "exit": 0,
-      "ms": 429,
+      "ms": 497,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK working\nOK session\nOK persistent Remembered pref.tts_rate.\nOK memory.py bridge\nOK context order\nALL memory scope tests passed"
@@ -132,23 +132,23 @@
     {
       "runner": "run_skills_tests.py",
       "exit": 0,
-      "ms": 458,
+      "ms": 526,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK normalize alias preserves registered form\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\n[executor] run windows.get_monitors({})\n[executor] ok windows.get_monitors in 0.03s\nOK executor skill Monitors: #1 main/primary/foreground/current/this 1920x1080 \nOK skill prompt\nALL skill tests passed"
+      "tail": "OK normalize alias preserves registered form\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\n[executor] run windows.get_monitors({})\n[executor] ok windows.get_monitors in 0.04s\nOK executor skill Monitors: #1 main/primary/left/foreground/current/this 1920x\nOK skill prompt\nALL skill tests passed"
     },
     {
       "runner": "run_learning_phase9.py",
       "exit": 0,
-      "ms": 2031,
+      "ms": 1904,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK blender.start_render builtin\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\nOK brain teach OK \ufffd teach me 'blender.new_project'. Do the steps yourself n\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK registry procedure tools\nALL Phase 9 learning tests passed"
+      "tail": "OK blender.start_render builtin\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK brain teach OK \ufffd teach me 'blender.new_project'. Do the steps yourself n\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK registry procedure tools\nALL Phase 9 learning tests passed"
     },
     {
       "runner": "run_computer_state_tests.py",
       "exit": 0,
-      "ms": 194,
+      "ms": 230,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK answers Chrome 2\nOK change detection focus_title: 'A' -> 'B' uia_added: export\nOK capture compose Chrome 767e9f5962b22f4f\nOK observe_world ComputerState Notepad\n\nComputerState tests passed."
@@ -156,7 +156,7 @@
     {
       "runner": "run_world_model_tests.py",
       "exit": 0,
-      "ms": 186,
+      "ms": 222,
       "status": "PASS",
       "known_reason": null,
       "tail": "Server list visible\n\nActive application: Chrome\nFocused monitor: 1\nCursor position: 100,200\n\n\nWorld model tests passed."
@@ -164,23 +164,23 @@
     {
       "runner": "run_element_resolver_tests.py",
       "exit": 0,
-      "ms": 734,
+      "ms": 756,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[resolver] resolved via OCR: 'Search' @(50,60)\nOK OCR fallthrough resolver:ocr:mouse\nOK click_ui_element delegates\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK registry click_element\n\nElement Resolver tests passed."
+      "tail": "[resolver] resolved via OCR: 'Search' @(50,60)\nOK OCR fallthrough resolver:ocr:mouse\nOK click_ui_element delegates\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK registry click_element\n\nElement Resolver tests passed."
     },
     {
       "runner": "run_voice_phase6.py",
       "exit": 0,
-      "ms": 443,
+      "ms": 508,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK wake then command Open YouTube and play some music\nOK hands-free\nOK conversation mode\nOK VAD endpoint 10400\nOK pipeline reject junk\nOK voice_mode allow\n\n=== Phase 6 voice tests passed ==="
+      "tail": "OK hands-free\nOK conversation mode\nOK VAD endpoint 10400\n[system_audio] pycaw peak meter ready\nOK pipeline reject junk\nOK voice_mode allow\n\n=== Phase 6 voice tests passed ==="
     },
     {
       "runner": "run_tts_phase7.py",
       "exit": 0,
-      "ms": 414,
+      "ms": 307,
       "status": "PASS",
       "known_reason": null,
       "tail": "OK browser fallback {'engine': 'browser', 'text': 'Hello from NEURON.', 'path': None, 'audio_url': None, 'interrupted': False, 'chunks': 0, 'error': None, 'client': 'speechSynthesis'}\nOK interruptible speak {'engine': 'fake', 'text': 'ignored text for chunking', 'path': 'C:\\\\fillo jarvis\\\\backend\\\\tts_out\\\\last.wav', 'audio_url': '/tts_out/last.wav', 'interrupted': True, 'chunks': 1, 'error': None} calls 1\nOK chunks ['Hello world.', 'How are you? Fine;', 'thanks.']\nOK concat wav\nOK tts_piper compat\nOK module speak/stop/is_speaking\n\nPhase 7 TTS tests passed."
@@ -188,61 +188,69 @@
     {
       "runner": "run_context_phase8.py",
       "exit": 0,
-      "ms": 1825,
+      "ms": 2123,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[opavr] VERIFICATION: {\"ok\": true, \"note\": \"final goal verified\", \"phase\": \"final_goal\", \"goal\": \"Play the YouTube result 'Lofi Radio' (index 0)\", \"world\": {\"url\": \"https://youtube.com/watch\"}, \"last_step\": \"browser_click\", \"prior_verify\": \"ok\", \"last_verify\": \"ok; url=https://youtube.com/watch\"}\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"Clicked.\", \"completed\": 1}\n[agent] done path=llm status=success acted=True recovered=False (1114ms) say='Clicked.'\nOK agent high rewrite Play the YouTube result 'Lofi Radio' (index 0)\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\nOK gather snapshot section\n\nPhase 8 context tests passed."
+      "tail": "[opavr] VERIFICATION: {\"ok\": true, \"note\": \"final goal verified\", \"phase\": \"final_goal\", \"goal\": \"Play the YouTube result 'Lofi Radio' (index 0)\", \"world\": {\"url\": \"https://youtube.com/watch\", \"ui_change\": {\"changed\": true, \"change_score\": 0.2, \"changed_regions\": [], \"window_changes\": [\"url:  -> https://youtube.com/watch\"], \"element_changes\": [], \"foreground_changed\": false, \"monitor_changed\": false, \"confidence\": 0.85, \"before_fp\": \"0515e985da6b3bfe\", \"after_fp\": \"fab2d13403aff8ed\", \"reason\": \"url:  -> https://youtu\n[opavr] FINAL: {\"status\": \"success\", \"say\": \"Clicked.\", \"completed\": 1}\n[agent] done path=llm status=success acted=True recovered=False (1246ms) say='Clicked.'\nOK agent high rewrite Play the YouTube result 'Lofi Radio' (index 0)\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK gather snapshot section\n\nPhase 8 context tests passed."
     },
     {
       "runner": "run_opavr_phase9.py",
       "exit": 0,
-      "ms": 1861,
+      "ms": 1866,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK AgentLoop facade Opened Notepad.\n[agent] intent kind=recipe action='open_app' text='open notepad'\n[uia-inspect] walked visited=8 elements=2 window=about:blank - Google Chrome\n[agent] capability id=windows.open_app tool=open_app conf=0.88 src=pattern\n[agent] done path=capability status=success acted=True recovered=False (1184ms) say='Opened Notepad.'\nOK agent AgentLoop meta capability True\n\nPhase 9 OPAVR tests passed."
+      "tail": "OK AgentLoop facade Opened Notepad.\n[agent] intent kind=recipe action='open_app' text='open notepad'\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \n[agent] capability id=windows.open_app tool=open_app conf=0.88 src=pattern\n[agent] done path=capability status=success acted=True recovered=False (1093ms) say='Opened Notepad.'\nOK agent AgentLoop meta capability True\n\nPhase 9 OPAVR tests passed."
     },
     {
       "runner": "run_windows_phase2.py",
       "exit": 0,
-      "ms": 899,
+      "ms": 1089,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK search_files validation\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\n[executor] run _test_fail_tool({})\n[executor] FAIL _test_fail_tool: nope\nOK executor ToolResult fail\n\n=== Phase 2 Windows tests passed ==="
+      "tail": "OK search_files validation\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\n[executor] run _test_fail_tool({})\n[executor] FAIL _test_fail_tool: nope\nOK executor ToolResult fail\n\n=== Phase 2 Windows tests passed ==="
     },
     {
       "runner": "run_uia_phase3.py",
       "exit": 0,
-      "ms": 1711,
+      "ms": 1888,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[uia-inspect] walked visited=7 elements=2 window=brain.py - fillo jarvis - Cursor\nOK get_ui_tree WINDOW: brain.py - fillo jarvis - Cursor [WindowControl] |   PaneControl: (unnamed\nOK find Settings Found 'Settings' (MenuItemControl) at (120,12) score=132\n[resolver] resolved via UIA: 'Settings' @(100,40)\nOK click invoke resolver:uia:invoke\nOK verifier click\n\n=== Phase 3 UI tests passed ==="
+      "tail": "[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK get_ui_tree WINDOW: that one otter game - Search and 2 more pages - Personal - Microsoft? Ed\nOK find Settings Found 'Settings' (MenuItemControl) at (120,12) score=132\n[resolver] resolved via UIA: 'Settings' @(100,40)\nOK click invoke resolver:uia:invoke\nOK verifier click\n\n=== Phase 3 UI tests passed ==="
     },
     {
       "runner": "run_browser_phase4.py",
       "exit": 0,
-      "ms": 461,
+      "ms": 499,
       "status": "PASS",
       "known_reason": null,
-      "tail": "[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK registry phase4 15\nOK browser_search mock Searched youtube for 'Unreal Engine tutorials'. Top: UE5 Beginner; UE5 Materials\nOK browser_click mock playwright:role\nOK browser_research sources ['https://example.com/a', 'https://example.com/b']\n\n=== Phase 4 browser tests passed ==="
+      "tail": "[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK registry phase4 15\nOK browser_search mock Searched youtube for 'Unreal Engine tutorials'. Top: UE5 Beginner; UE5 Materials\nOK browser_click mock playwright:role\nOK browser_research sources ['https://example.com/a', 'https://example.com/b']\n\n=== Phase 4 browser tests passed ==="
     },
     {
       "runner": "run_vision_phase5.py",
       "exit": 0,
-      "ms": 843,
+      "ms": 847,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK active screenshot active_window.png brain.py - fillo jarvis - Cursor\n[uia-inspect] walked visited=13 elements=7 window=brain.py - fillo jarvis - Cursor\nOK pipeline uia-first ['uia', 'capture'] Cursor\n[uia-inspect] walked visited=13 elements=7 window=brain.py - fillo jarvis - Cursor\nOK analyze_screen monitor=1 app=Cursor title=brain.py - fillo jarvis - Cursor cursor=(641,762) ui=\nOK detect_text_regions validation\n\n=== Phase 5 vision tests passed ==="
+      "tail": "OK active screenshot active_window.png that one otter game - Search and 2 more \n[uia-inspect] walked visited=47 elements=12 window=that one otter game - Search and 2 more \nOK pipeline uia-first ['uia', 'capture'] Microsoft? Edge\n[uia-inspect] walked visited=47 elements=12 window=that one otter game - Search and 2 more \nOK analyze_screen monitor=1 app=Microsoft? Edge title=that one otter game - Search and 2 more page\nOK detect_text_regions validation\n\n=== Phase 5 vision tests passed ==="
     },
     {
       "runner": "run_monitors_phase10.py",
       "exit": 0,
-      "ms": 560,
+      "ms": 505,
       "status": "PASS",
       "known_reason": null,
-      "tail": "OK windows by monitor\nOK move to other screen Moved 'Blender' to monitor 2 (secondary,right,other) (was #1).\n[tools] registered 43 domain skills\n[tools] registered 5 learned/builtin procedures\nOK registry phase10\nOK live monitors Monitors: #1 main/primary/foreground/current/this 1920x1080 @(0,0)\n\nPhase 10 multi-monitor tests passed."
+      "tail": "OK windows by monitor\nOK move to other screen Moved 'Blender' to monitor 2 (secondary,right,other) (was #1).\n[tools] registered 43 domain skills\n[tools] registered 6 learned/builtin procedures\nOK registry phase10\nOK live monitors Monitors: #1 main/primary/left/foreground/current/this 1920x1080 @(0,0); #2 secondary/right/other 1920x1080 @(1920,0)\n\nPhase 10 multi-monitor tests passed."
+    },
+    {
+      "runner": "run_v4_unit_tests.py",
+      "exit": 0,
+      "ms": 1952,
+      "status": "PASS",
+      "known_reason": null,
+      "tail": "OK V4.7 routing parity unit\nOK V4.8 capability resolve\nOK V4.9 eligibility + privacy\nOK V4.9 catalog COMPOSITE + learning flag default off\n[uia-inspect] walked visited=10 elements=2 window=that one otter game - Search and 2 more \nOK V4.10 voice shadow gates + readiness computed\n\nALL V4 unit tests passed (V4.0 .. V4.10)"
     }
   ],
-  "pass": 30,
+  "pass": 31,
   "fail": 0,
   "known_fail": 0,
   "new_fail": 0,

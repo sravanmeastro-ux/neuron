@@ -1,0 +1,150 @@
+{
+  "preview": [
+    {
+      "utterance": "Open Chrome",
+      "tools": [
+        "windows.open_app",
+        "open_app"
+      ],
+      "eligible": true,
+      "reason": "allow: APP_OPEN",
+      "plan_ms": 319.96
+    },
+    {
+      "utterance": "Focus Chrome",
+      "tools": [
+        "windows.focus_app",
+        "focus_app"
+      ],
+      "eligible": true,
+      "reason": "allow: WINDOW_FOCUS",
+      "plan_ms": 0.2
+    },
+    {
+      "utterance": "Move Chrome to monitor 2",
+      "tools": [
+        "windows.move_to_monitor",
+        "move_window_to_monitor"
+      ],
+      "eligible": true,
+      "reason": "allow: WINDOW_MOVE",
+      "plan_ms": 0.31
+    },
+    {
+      "utterance": "Maximize Chrome",
+      "tools": [],
+      "eligible": true,
+      "reason": "allow: WINDOW_MAXIMIZE",
+      "plan_ms": 0.13
+    },
+    {
+      "utterance": "Go to YouTube",
+      "tools": [
+        "youtube.home",
+        "open_website",
+        "open_app"
+      ],
+      "eligible": true,
+      "reason": "allow: YOUTUBE_HOME",
+      "plan_ms": 0.61
+    },
+    {
+      "utterance": "Search YouTube for Blender tutorials",
+      "tools": [
+        "youtube.home",
+        "open_website",
+        "open_app",
+        "youtube.search"
+      ],
+      "eligible": true,
+      "reason": "allow: YOUTUBE_SEARCH",
+      "plan_ms": 0.16
+    }
+  ],
+  "results": [
+    {
+      "utterance": "Close Notepad",
+      "say": "Confirm to run close_app: Confirmation required: Catalog tier=confirm. Say 'confirm' or 'go ahead' to proceed, or 'cancel'.. Say 'confirm' to proceed.",
+      "acted": true,
+      "path": "brain.handle_command",
+      "route": {},
+      "hierarchical_voice": false,
+      "outcome": "WAITING_FOR_CONFIRMATION",
+      "recovered": false,
+      "needs_confirm": {
+        "action": "close_app",
+        "args": {
+          "name": "notepad"
+        },
+        "reason": "Confirmation required: Catalog tier=confirm. Say 'confirm' or 'go ahead' to proceed, or 'cancel'.",
+        "tier": "confirm",
+        "at": 1785511042.5845876,
+        "expires_at": 1785511132.5845876,
+        "prompt": "Needs confirmation: close_app. Say confirm to proceed, or cancel.",
+        "confirmation_id": "cfm_1785511042",
+        "task": "close notepad",
+        "world_fingerprint": ""
+      },
+      "elapsed_ms": 1188.58,
+      "goal": null,
+      "latency": null,
+      "request_id": null,
+      "via_brain": true
+    },
+    {
+      "utterance": "yes",
+      "say": "I couldn't complete: confirm close_app. Finished: wait. Problem: Window still present for notepad: *hello - Notepad Still pending: close_app.",
+      "acted": true,
+      "path": "brain.handle_command",
+      "route": {},
+      "hierarchical_voice": false,
+      "outcome": "UNCERTAIN",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 15243.42,
+      "goal": null,
+      "latency": null,
+      "request_id": null,
+      "via_brain": true
+    },
+    {
+      "utterance": "Open Spotify",
+      "say": "Opened spotify.",
+      "acted": true,
+      "path": "brain.handle_command",
+      "route": {},
+      "hierarchical_voice": false,
+      "outcome": "UNCERTAIN",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 4207.22,
+      "goal": null,
+      "latency": null,
+      "request_id": null,
+      "via_brain": true
+    }
+  ],
+  "summary": {
+    "LIVE_ATTEMPT_COUNT": 3,
+    "LIVE_VERIFIED_SUCCESS_COUNT": 0,
+    "LIVE_FAILURE_COUNT": 0,
+    "LIVE_UNCERTAIN_COUNT": 2,
+    "LIVE_RECOVERY_COUNT": 0,
+    "LIVE_CONFIRM_COUNT": 1,
+    "LIVE_CANCELLED_COUNT": 0,
+    "mean_latency_ms": 6879.74
+  },
+  "metrics": {
+    "VOICE_SHADOW_MISMATCH_COUNT": 0,
+    "SHADOW_MUTATION_COUNT": 0,
+    "VOICE_SAFETY_MISMATCH_COUNT": 0,
+    "VOICE_DUPLICATE_EXECUTION_COUNT": 0,
+    "UNVERIFIED_COMPLETION_RESPONSE_COUNT": 0
+  },
+  "config": {
+    "hierarchical_voice_enabled": true,
+    "voice_routing_mode": "CANARY",
+    "configured_mode": "CANARY",
+    "procedure_learning_enabled": false
+  }
+}

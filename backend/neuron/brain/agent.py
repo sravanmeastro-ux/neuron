@@ -63,26 +63,78 @@ def run(
     tr = Trace()
     loop = AgentLoop(confirmed=confirmed, trace=tr)
 
-    intent = intent_mod.understand(raw)
+    # V4.7 ConversationEngine — shared context/NLU boundary (does not replace routing yet)
+    v4u = None
+    try:
+        from neuron.v4.context import understand_for_agent, on_ask_user_clarify, cancel_for_stop
+        from neuron.v4.context.types import RouteDest, ContinuityKind
+
+        v4u = understand_for_agent(raw)
+        meta["v4_nlu"] = v4u.to_dict()
+        if v4u.route is RouteDest.STOP or v4u.continuity is ContinuityKind.CANCEL:
+            if "stop" in (v4u.rewritten_command or raw or "").lower() or (
+                v4u.goal and v4u.goal.intent_family.value == "STOP"
+            ):
+                cancel_for_stop()
+                meta["path"] = "stop"
+                return "__STOP_SPEECH__", True, meta
+        if v4u.route is RouteDest.REJECT:
+            meta["path"] = "rejected"
+            say = "Okay, I won't."
+            return say, True, meta
+        if v4u.route is RouteDest.CLARIFY and v4u.clarification:
+            on_ask_user_clarify(
+                v4u.clarification.prompt,
+                original_goal=v4u.rewritten_command or raw,
+                options=v4u.clarification.options,
+                source="v4_context",
+            )
+            meta["path"] = "ask_user"
+            meta["elapsed_ms"] = int((time.time() - t0) * 1000)
+            return v4u.clarification.prompt or "Which one did you mean?", True, meta
+        if v4u.clarification_resolution and not v4u.clarification_resolution.get("resolved"):
+            if v4u.clarification_resolution.get("cancel"):
+                meta["path"] = "ask_user"
+                return "Okay, cancelled.", True, meta
+            if v4u.clarification_resolution.get("reason") == "neither":
+                meta["path"] = "ask_user"
+                return "Okay — which one instead?", True, meta
+    except Exception as exc:
+        _log(f"v4 context skipped: {exc}")
+
+    intent = intent_mod.understand(
+        (v4u.rewritten_command if v4u and v4u.rewritten_command else None) or raw
+    )
     _log(f"intent kind={intent.kind} action={intent.action!r} text={intent.normalized!r}")
 
     if intent.kind == "empty":
         meta["path"] = "empty"
         return None, False, meta
     if intent.kind == "stop":
+        try:
+            from neuron.v4.context import cancel_for_stop
+            cancel_for_stop()
+        except Exception:
+            pass
         meta["path"] = "stop"
         return "__STOP_SPEECH__", True, meta
 
     cfg = _agent_cfg()
 
+    # Prefer V4.7 rewritten command for downstream resolver/router
+    if v4u and v4u.rewritten_command and v4u.confidence >= 0.55:
+        raw_for_resolve = v4u.rewritten_command
+    else:
+        raw_for_resolve = raw
+
     # V3.3 ReferenceResolver — rewrite deixis using ContextEngine before routing.
     # V3.4: PerceptionEngine supplies ui_candidates only when context is insufficient.
-    resolved_request = raw
+    resolved_request = raw_for_resolve
     if cfg.get("reference_resolver", True):
         try:
             from neuron.v3.reference_resolver import needs_resolution, resolve_reference
-            if needs_resolution(intent.normalized or raw) or needs_resolution(raw):
-                ref = resolve_reference(raw, intent=intent)
+            if needs_resolution(intent.normalized or raw_for_resolve) or needs_resolution(raw_for_resolve):
+                ref = resolve_reference(raw_for_resolve, intent=intent)
                 if (
                     cfg.get("perception_engine", True)
                     and (
@@ -97,14 +149,16 @@ def run(
                             wants_ui_candidates,
                         )
                         probe = (
-                            raw if needs_resolution(raw) else (intent.normalized or raw)
+                            raw_for_resolve
+                            if needs_resolution(raw_for_resolve)
+                            else (intent.normalized or raw_for_resolve)
                         )
                         if wants_ui_candidates(probe):
                             ui_candidates = ui_candidates_for(probe) or None
                             if ui_candidates:
                                 meta["perception_candidates"] = len(ui_candidates)
                                 ref = resolve_reference(
-                                    raw,
+                                    raw_for_resolve,
                                     intent=intent,
                                     ui_candidates=ui_candidates,
                                 )
@@ -115,6 +169,18 @@ def run(
                     meta["path"] = "ask_user"
                     meta["elapsed_ms"] = int((time.time() - t0) * 1000)
                     say = ref.clarification_prompt or "Which one did you mean?"
+                    try:
+                        from neuron.v4.context import on_ask_user_clarify
+                        on_ask_user_clarify(
+                            say,
+                            original_goal=raw_for_resolve,
+                            options=list(getattr(ref, "candidates", None) or [])
+                            if isinstance(getattr(ref, "candidates", None), list)
+                            else None,
+                            source="reference_resolver",
+                        )
+                    except Exception:
+                        pass
                     tr.user(raw)
                     tr.final("ask_user", say)
                     meta["trace"] = tr.to_list()
@@ -135,6 +201,36 @@ def run(
                     )
         except Exception as exc:
             _log(f"reference_resolver skipped: {exc}")
+
+    # V4.10 hierarchical voice canary / shadow (default LEGACY → no-op)
+    try:
+        from neuron.v4.voice import maybe_handle_voice
+        hv = maybe_handle_voice(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            intent=intent,
+            v4u=v4u,
+            confirmed=confirmed,
+        )
+        if hv is not None:
+            say, acted, hmeta = hv
+            meta.update({k: v for k, v in (hmeta or {}).items() if k != "loop"})
+            loop_meta = dict((hmeta or {}).get("loop") or {})
+            if (hmeta or {}).get("outcome"):
+                meta["outcome"] = hmeta["outcome"]
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((hmeta or {}).get("path") or "hierarchical"),
+            )
+    except Exception as exc:
+        _log(f"v4 hierarchical voice skipped: {exc}")
 
     # V3 CapabilityRouter — high-confidence capabilities → fixed plan → AgentLoop.
     # Unsupported → fall through to recipe/deterministic/LLM (V2 paths unchanged).
@@ -308,12 +404,21 @@ def _finish(
 
     if loop_meta.get("needs_confirm"):
         meta["needs_confirm"] = loop_meta["needs_confirm"]
-        from neuron.safety import confirm as confirm_mod
-        confirm_mod.request_confirm(
-            loop_meta["needs_confirm"]["action"],
-            loop_meta["needs_confirm"].get("args") or {},
-            loop_meta["needs_confirm"].get("reason") or "",
-        )
+        try:
+            from neuron.v4.capability.confirm_resume import request_confirm_scoped
+            request_confirm_scoped(
+                loop_meta["needs_confirm"]["action"],
+                loop_meta["needs_confirm"].get("args") or {},
+                reason=loop_meta["needs_confirm"].get("reason") or "",
+                task=str((meta.get("goal") or {}).get("goal") or ""),
+            )
+        except Exception:
+            from neuron.safety import confirm as confirm_mod
+            confirm_mod.request_confirm(
+                loop_meta["needs_confirm"]["action"],
+                loop_meta["needs_confirm"].get("args") or {},
+                loop_meta["needs_confirm"].get("reason") or "",
+            )
         say = (
             f"Confirm to run {loop_meta['needs_confirm'].get('action')}: "
             f"{loop_meta['needs_confirm'].get('reason')}. Say 'confirm' to proceed."

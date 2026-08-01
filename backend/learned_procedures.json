@@ -86,7 +86,7 @@
       "builtin": false,
       "source": "test",
       "semantic": true,
-      "created": "2026-07-30T21:49:29",
+      "created": "2026-07-31T20:52:45",
       "meta": {
         "sanitize_warnings": [
           "dropped non-adaptive coordinate step (click)"
@@ -122,7 +122,7 @@
       "builtin": false,
       "source": "test",
       "semantic": true,
-      "created": "2026-07-30T21:49:35",
+      "created": "2026-07-31T20:52:52",
       "meta": {
         "sanitize_warnings": []
       }
@@ -160,13 +160,62 @@
       "builtin": false,
       "source": "demonstration",
       "semantic": true,
-      "created": "2026-07-30T21:49:36",
+      "created": "2026-07-31T20:52:53",
       "meta": {
         "click_recipe_id": "",
         "goal": "create a new Blender project",
         "sanitize_warnings": []
       }
+    },
+    {
+      "id": "learned.youtube_search_workflow",
+      "domain": "learned",
+      "name": "youtube_search_workflow",
+      "say": [
+        "youtube search workflow",
+        "do my youtube search workflow",
+        "run my youtube search workflow",
+        "youtube search workflow workflow",
+        "run learned youtube_search_workflow"
+      ],
+      "steps": [
+        {
+          "action": "windows.open_app",
+          "args": {
+            "name": "Chrome"
+          },
+          "target": "",
+          "expected_result": ""
+        },
+        {
+          "action": "windows.move_to_monitor",
+          "args": {
+            "monitor": "{monitor}"
+          },
+          "target": "",
+          "expected_result": ""
+        },
+        {
+          "action": "youtube.search",
+          "args": {
+            "query": "{query}"
+          },
+          "target": "",
+          "expected_result": ""
+        }
+      ],
+      "builtin": false,
+      "source": "v4_learned",
+      "semantic": true,
+      "created": "2026-07-31T20:53:09",
+      "meta": {
+        "version": 1,
+        "confidence": 0.91,
+        "intent_family": "youtube_search",
+        "v4": true,
+        "sanitize_warnings": []
+      }
     }
   ],
-  "updated": "2026-07-30T21:49:36"
+  "updated": "2026-07-31T20:53:09"
 }

@@ -7,12 +7,16 @@ from neuron.safety.levels import classify
 
 
 def request_confirm(action: str, args: dict, reason: str = "") -> dict:
+    import time
     c = classify(action, args)
+    now = time.time()
     payload = {
         "action": action,
         "args": args,
         "reason": reason or c.reason or f"Confirm {action}?",
         "tier": c.tier,
+        "at": now,
+        "expires_at": now + 90.0,
         "prompt": (
             f"{'High-consequence action' if c.tier == 'high' else 'Needs confirmation'}: "
             f"{action}. Say confirm to proceed, or cancel."

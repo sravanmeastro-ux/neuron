@@ -1,0 +1,339 @@
+{
+  "soak_status": "PASS",
+  "summary": {
+    "LIVE_ATTEMPT_COUNT": 10,
+    "LIVE_VERIFIED_SUCCESS_COUNT": 8,
+    "LIVE_FAILURE_COUNT": 0,
+    "LIVE_UNCERTAIN_COUNT": 2,
+    "LIVE_RECOVERY_COUNT": 2,
+    "LIVE_CONFIRM_COUNT": 0,
+    "LIVE_CANCELLED_COUNT": 0,
+    "mean_latency_ms": 4344.45
+  },
+  "results": [
+    {
+      "utterance": "Open Chrome",
+      "say": "chrome was already open - focused it.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: APP_OPEN",
+        "intent_family": "APP_OPEN",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_0f2ef1dc3aa1"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 3129.31,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 3.19,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 2830.44
+      },
+      "request_id": "vr_0f2ef1dc3aa1",
+      "via_brain": false
+    },
+    {
+      "utterance": "Focus Chrome",
+      "say": "I tried to windows.focus_app, but I couldn't verify that it actually worked.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: WINDOW_FOCUS",
+        "intent_family": "WINDOW_FOCUS",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_01c1726aa38e"
+      },
+      "hierarchical_voice": true,
+      "outcome": "UNCERTAIN",
+      "recovered": true,
+      "needs_confirm": null,
+      "elapsed_ms": 9671.36,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.24,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 9663.04
+      },
+      "request_id": "vr_01c1726aa38e",
+      "via_brain": false
+    },
+    {
+      "utterance": "Move Chrome to monitor 2",
+      "say": "Moved 'about:blank - Google Chrome' to monitor 2 (secondary,right,other) (was #2).",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: WINDOW_MOVE",
+        "intent_family": "WINDOW_MOVE",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_084b219905a9"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 999.47,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.34,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 980.98
+      },
+      "request_id": "vr_084b219905a9",
+      "via_brain": false
+    },
+    {
+      "utterance": "Maximize Chrome",
+      "say": "My reasoning core had a problem: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>",
+      "acted": true,
+      "path": "llm",
+      "route": {},
+      "hierarchical_voice": false,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 8191.16,
+      "goal": {
+        "goal": "maximize chrome",
+        "status": "success",
+        "completed": 0,
+        "pending": 0,
+        "retries": 0,
+        "errors": []
+      },
+      "latency": null,
+      "request_id": null,
+      "via_brain": false
+    },
+    {
+      "utterance": "Open Notepad",
+      "say": "notepad was already open - focused it.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: APP_OPEN",
+        "intent_family": "APP_OPEN",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_7af01b45041d"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 1921.72,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.1,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 1905.48
+      },
+      "request_id": "vr_7af01b45041d",
+      "via_brain": false
+    },
+    {
+      "utterance": "Focus Notepad",
+      "say": "I tried to windows.focus_app, but I couldn't verify that it actually worked.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: WINDOW_FOCUS",
+        "intent_family": "WINDOW_FOCUS",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_42e9d2a6626b"
+      },
+      "hierarchical_voice": true,
+      "outcome": "UNCERTAIN",
+      "recovered": true,
+      "needs_confirm": null,
+      "elapsed_ms": 9766.43,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.1,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 9749.89
+      },
+      "request_id": "vr_42e9d2a6626b",
+      "via_brain": false
+    },
+    {
+      "utterance": "Move Chrome to monitor 1",
+      "say": "Moved 'about:blank - Google Chrome' to monitor 1 (main,primary,left,foreground,current,this) (was #2).",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: WINDOW_MOVE",
+        "intent_family": "WINDOW_MOVE",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_602789c5f339"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 1007.1,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.12,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 989.75
+      },
+      "request_id": "vr_602789c5f339",
+      "via_brain": false
+    },
+    {
+      "utterance": "Go to YouTube",
+      "say": "Back on the YouTube homepage.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: BROWSER_NAVIGATE",
+        "intent_family": "BROWSER_NAVIGATE",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_f869166b77ed"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 2491.8,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.73,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 2481.11
+      },
+      "request_id": "vr_f869166b77ed",
+      "via_brain": false
+    },
+    {
+      "utterance": "Search YouTube for Blender tutorials",
+      "say": "Searching YouTube for blender tutorials.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: YOUTUBE_SEARCH",
+        "intent_family": "YOUTUBE_SEARCH",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_5a7590ad8840"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 4130.17,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.35,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 4109.68
+      },
+      "request_id": "vr_5a7590ad8840",
+      "via_brain": false
+    },
+    {
+      "utterance": "Open Chrome",
+      "say": "chrome was already open - focused it.",
+      "acted": true,
+      "path": "hierarchical",
+      "route": {
+        "route": "hierarchical_canary",
+        "eligible": true,
+        "reason": "allow: APP_OPEN",
+        "intent_family": "APP_OPEN",
+        "capability_ids": [],
+        "risk": "safe",
+        "committed": true,
+        "request_id": "vr_fbaa0552a1c0"
+      },
+      "hierarchical_voice": true,
+      "outcome": "SUCCESS",
+      "recovered": false,
+      "needs_confirm": null,
+      "elapsed_ms": 2135.93,
+      "goal": null,
+      "latency": {
+        "understand_ms": 0.0,
+        "plan_ms": 0.13,
+        "first_action_ms": 0.0,
+        "verify_ms": 0.0,
+        "recovery_ms": 0.0,
+        "total_ms": 2117.39
+      },
+      "request_id": "vr_fbaa0552a1c0",
+      "via_brain": false
+    }
+  ],
+  "metrics": {
+    "VOICE_SHADOW_MISMATCH_COUNT": 0,
+    "SHADOW_MUTATION_COUNT": 0,
+    "VOICE_SAFETY_MISMATCH_COUNT": 0,
+    "VOICE_DUPLICATE_EXECUTION_COUNT": 0,
+    "UNVERIFIED_COMPLETION_RESPONSE_COUNT": 0
+  },
+  "config": {
+    "hierarchical_voice_enabled": true,
+    "voice_routing_mode": "CANARY",
+    "configured_mode": "CANARY",
+    "procedure_learning_enabled": false
+  }
+}

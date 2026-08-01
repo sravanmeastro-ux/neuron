@@ -59,7 +59,7 @@
     "max_steps": 40,
     "poll_seconds": 0.05,
     "store_pixels": false,
-    "_comment": "OFF until you say 'start recording clicks'. Captures UIA names into semantic recipes — never passwords/pixels by default (V3.8)."
+    "_comment": "OFF until you say 'start recording clicks'. Captures UIA names into semantic recipes \u2014 never passwords/pixels by default (V3.8)."
   },
   "assistant": {
     "name": "NEURON",
@@ -73,14 +73,16 @@
     "partial_interval_seconds": 0.85,
     "openwakeword_enabled": false,
     "openwakeword_threshold": 0.5,
-    "openwakeword_models": ["hey_jarvis"],
+    "openwakeword_models": [
+      "hey_jarvis"
+    ],
     "media_gate_enabled": true,
     "media_peak_threshold": 0.18,
     "media_loud_hold_ms": 500,
     "media_quiet_release_ms": 1500,
     "media_require_wake": true,
     "media_speech_rms_scale": 1.0,
-    "_comment": "When speakers are loud, reject YouTube dialogue and require 'Neuron' for most commands — but short safe ones (scroll down, mute, skip ad) still work. media_speech_rms_scale=1.0 keeps your voice audible (raising it made NEURON miss you)."
+    "_comment": "When speakers are loud, reject YouTube dialogue and require 'Neuron' for most commands \u2014 but short safe ones (scroll down, mute, skip ad) still work. media_speech_rms_scale=1.0 keeps your voice audible (raising it made NEURON miss you)."
   },
   "tts": {
     "enabled": true,
@@ -92,7 +94,7 @@
     "voice_name": "",
     "piper_path": "",
     "model_path": "",
-    "_comment": "Phase 7 local TTS. provider empty = auto (piper → system/pyttsx3 → browser). streaming=sentence chunks. play_locally=server speakers (optional)."
+    "_comment": "Phase 7 local TTS. provider empty = auto (piper \u2192 system/pyttsx3 \u2192 browser). streaming=sentence chunks. play_locally=server speakers (optional)."
   },
   "agent": {
     "enabled": true,
@@ -108,6 +110,9 @@
     "multi_monitor_v38": true,
     "multi_app_planner": true,
     "semantic_skills": true,
+    "hierarchical_voice_enabled": false,
+    "voice_routing_mode": "LEGACY",
+    "procedure_learning_enabled": false,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -118,6 +123,6 @@
     "ocr_verify": "auto",
     "context_high_confidence": 0.75,
     "context_medium_confidence": 0.45,
-    "_comment": "V3.8 multi-monitor + multi-app + semantic skills. Prior: adaptive AgentLoop (V3.7), CapabilityRouter, ContextEngine, ReferenceResolver, PerceptionEngine, ToolRegistry, GroundedPlanner."
+    "_comment": "V4.10 hierarchical_voice_enabled default false; voice_routing_mode LEGACY|SHADOW|CANARY|HIERARCHICAL (fail-closed). V4.9 procedure_learning_enabled default false. V3.8 multi-monitor + semantic skills."
   }
 }

@@ -192,28 +192,22 @@ def handle_command(raw: str):
     agent_attempted = False
 
     # ---- confirm pending high-risk / confirm-tier tool ---------------
+    # V4.8: resume through AgentLoop (observe/verify/recover) — not bare executor.
     if re.fullmatch(r"(?:please )?(?:confirm|yes|do it|proceed|go ahead)(?: please)?", text):
         try:
-            from neuron.safety import confirm as confirm_mod
-            from neuron.brain import executor
-            pending = confirm_mod.take_pending()
-            if pending:
-                plan = {
-                    "say": "",
-                    "steps": [{
-                        "action": pending["action"],
-                        "args": dict(pending.get("args") or {}),
-                    }],
-                }
-                plan["steps"][0]["args"]["confirmed"] = True
-                er = executor.execute_plan(plan, confirmed=True)
-                if er.errors:
-                    return "I hit a problem: " + "; ".join(er.errors), True
-                return (er.outcomes[-1] if er.outcomes else "Done."), True
-            return "Nothing waiting for confirmation.", True
+            from neuron.v4.capability.confirm_resume import resume_confirmation_via_agent_loop
+            say, acted, meta = resume_confirmation_via_agent_loop(confirmed=True)
+            return say, acted
         except Exception as exc:
             return f"Confirm failed: {exc}", True
     if re.fullmatch(r"(?:please )?(?:cancel|abort|never ?mind|no)(?: please)?", text):
+        try:
+            from neuron.v4.capability.confirm_resume import cancel_confirmation, peek_pending
+            if peek_pending():
+                cancel_confirmation()
+                return "Cancelled.", True
+        except Exception:
+            pass
         try:
             from neuron.safety import confirm as confirm_mod
             if confirm_mod.take_pending():

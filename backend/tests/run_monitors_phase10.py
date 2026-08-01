@@ -149,7 +149,9 @@ def test_move_window_to_other_screen_verify():
 
     with mock.patch.object(mon_mod, "list_monitor_dicts", return_value=mons), mock.patch.object(
         mon_mod, "_resolve_window", return_value=(99, blender)
-    ), mock.patch.object(mon_mod, "_window_by_hwnd", return_value=after), mock.patch(
+    ), mock.patch.object(mon_mod, "_window_by_hwnd", return_value=after), mock.patch.object(
+        mon_mod, "_list_windows_with_monitor", return_value=[blender]
+    ), mock.patch(
         "ctypes.windll.user32.ShowWindow", return_value=True
     ), mock.patch(
         "ctypes.windll.user32.MoveWindow", return_value=True

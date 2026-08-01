@@ -76,6 +76,11 @@ NORMALIZERS: list[tuple[str, str]] = [
     (rf"^(open|close|quit|exit)\s+{_ARTICLE}(.+)$", r"\1 \2"),
     # "open up chrome" → open chrome (tiny grammar, still normal)
     (r"^(open|close)\s+up\s+(.+)$", r"\1 \2"),
+    # "bring up chrome" / "bring chrome up"
+    (r"^bring\s+up\s+(.+)$", r"open \1"),
+    (r"^bring\s+(.+?)\s+up$", r"open \1"),
+    # "I need chrome" (casual request)
+    (r"^i\s+need\s+(.+)$", r"open \1"),
     # "start chrome" / "launch chrome" → open chrome (common normal verbs)
     # Do NOT rewrite "start recording …" / "start watching …"
     (r"^(start|launch)\s+(?!recording\b|watching\b|listen(?:ing)?\b)(.+)$", r"open \2"),

@@ -1,0 +1,61 @@
+{
+  "legacy": {
+    "label": "LEGACY",
+    "n": 3,
+    "mean": 4962.06,
+    "median": 4199.11,
+    "p95": 4199.11,
+    "samples": [
+      {
+        "utt": "Open Chrome",
+        "ms": 4199.11,
+        "outcome": "SUCCESS",
+        "path": "capability"
+      },
+      {
+        "utt": "Focus Chrome",
+        "ms": 9711.41,
+        "outcome": "UNCERTAIN",
+        "path": "capability"
+      },
+      {
+        "utt": "Move Chrome to monitor 2",
+        "ms": 975.65,
+        "outcome": "SUCCESS",
+        "path": "capability"
+      }
+    ]
+  },
+  "canary": {
+    "label": "CANARY",
+    "n": 3,
+    "mean": 4225.9,
+    "median": 1914.47,
+    "p95": 1914.47,
+    "samples": [
+      {
+        "utt": "Open Chrome",
+        "ms": 1914.47,
+        "outcome": "SUCCESS",
+        "path": "hierarchical"
+      },
+      {
+        "utt": "Focus Chrome",
+        "ms": 9755.3,
+        "outcome": "UNCERTAIN",
+        "path": "hierarchical"
+      },
+      {
+        "utt": "Move Chrome to monitor 2",
+        "ms": 1007.94,
+        "outcome": "SUCCESS",
+        "path": "hierarchical"
+      }
+    ]
+  },
+  "stt_to_understanding": "NOT_MEASURED",
+  "understanding_to_plan": "NOT_MEASURED_PER_PHASE",
+  "plan_to_first_action": "NOT_MEASURED_SEPARATE",
+  "action_to_verification": "NOT_MEASURED_SEPARATE",
+  "note": "total task latency only (agent.run wall clock)"
+}

@@ -49,6 +49,7 @@ RUNNERS = [
     "run_browser_phase4.py",
     "run_vision_phase5.py",
     "run_monitors_phase10.py",
+    "run_v4_unit_tests.py",
 ]
 
 # Pre-existing failures recorded at V3.1 audit (2026-07-30). Cleared when fixed.

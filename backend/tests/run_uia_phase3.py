@@ -57,7 +57,7 @@ def test_get_ui_tree_live():
     if r.success:
         assert "elements" in r.state
         assert isinstance(r.state["elements"], list)
-    print("OK get_ui_tree", (r.message or "")[:80].replace("\n", " | "))
+    print("OK get_ui_tree", (r.message or "")[:80].replace("\n", " | ").encode("ascii", "replace").decode("ascii"))
 
 
 def test_find_with_mock_tree():

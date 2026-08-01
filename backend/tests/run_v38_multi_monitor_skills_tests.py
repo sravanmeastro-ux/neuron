@@ -65,7 +65,12 @@ def test_multi_monitor_window_movement_mock():
 
     def fake_move(args):
         from neuron.windows.result import ok
-        mon = mon_mod.resolve_monitor_ref(args.get("monitor"), monitors=_fake_mons())
+        # Match production: "other" is relative to the window's current monitor.
+        mon = mon_mod.resolve_monitor_ref(
+            args.get("monitor"),
+            relative_to=int(args.get("from_monitor") or 1),
+            monitors=_fake_mons(),
+        )
         moved["monitor"] = int(mon["id"])
         return ok(
             f"moved to {moved['monitor']}",
