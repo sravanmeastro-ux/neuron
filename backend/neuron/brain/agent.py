@@ -601,6 +601,20 @@ def _finish(
         f"({meta['elapsed_ms']}ms) say={say!r}"[:240]
     )
     try:
+        if acted:
+            from neuron.learning_engine import observe_utterance
+            req = ""
+            try:
+                for entry in tr.to_list():
+                    if (entry.get("role") or entry.get("kind")) in ("user", "User"):
+                        req = str(entry.get("text") or entry.get("content") or "")
+                        break
+            except Exception:
+                pass
+            observe_utterance(req or path, acted=True)
+    except Exception:
+        pass
+    try:
         import memory
         if say:
             memory.log("neuron", say)

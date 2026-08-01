@@ -461,6 +461,11 @@ def handle_command(raw: str):
                 )
             except Exception:
                 pass
+            try:
+                from neuron.learning_engine import observe_utterance
+                observe_utterance(text, acted=True)
+            except Exception:
+                pass
             return fr.say, True
     except Exception as exc:
         print(f"[fast_router] skipped: {exc}", flush=True)

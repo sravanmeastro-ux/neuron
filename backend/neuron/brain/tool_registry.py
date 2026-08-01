@@ -253,7 +253,26 @@ def execute(
             raise
         except Exception:
             pass
-    return spec.handler(coerced)
+    try:
+        result = spec.handler(coerced)
+        ok = True
+        detail = ""
+        if hasattr(result, "success"):
+            ok = bool(result.success)
+            detail = str(getattr(result, "message", "") or "")
+        try:
+            from neuron.learning_engine import observe_tool
+            observe_tool(spec.name, coerced, ok=ok, detail=detail)
+        except Exception:
+            pass
+        return result
+    except Exception as exc:
+        try:
+            from neuron.learning_engine import observe_tool
+            observe_tool(spec.name, coerced, ok=False, detail=str(exc))
+        except Exception:
+            pass
+        raise
 
 
 def tools_doc(limit: int = 80) -> str:
@@ -583,6 +602,21 @@ def _bootstrap_new() -> None:
         )
     except Exception as exc:
         print(f"[tools] computer_use tools skipped: {exc}", flush=True)
+
+    try:
+        from neuron.learning_engine import tool_learning_status
+        register(
+            "learning_status",
+            tool_learning_status,
+            description="Show Learning Engine favorites, rankings, and habit predictions",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+    except Exception as exc:
+        print(f"[tools] learning_engine skipped: {exc}", flush=True)
 
 
 def _default_methods(name: str) -> list[str]:

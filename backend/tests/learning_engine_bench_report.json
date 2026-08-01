@@ -1,0 +1,264 @@
+{
+  "reinforce_ok": true,
+  "chrome_ranked_first": true,
+  "youtube_favorite": true,
+  "preferred_editor_ok": true,
+  "preferred_browser_ok": true,
+  "predictions_n": 5,
+  "ranked_n": 8,
+  "workflows_n": 3,
+  "prompt_ok": true,
+  "observe_batch_ms": 120.12,
+  "snapshot": {
+    "summary": {
+      "apps": [
+        {
+          "key": "Chrome",
+          "score": 0.763,
+          "count": 5
+        },
+        {
+          "key": "Code",
+          "score": 0.578,
+          "count": 3
+        },
+        {
+          "key": "Discord",
+          "score": 0.438,
+          "count": 2
+        },
+        {
+          "key": "Notepad",
+          "score": -0.06,
+          "count": 1
+        }
+      ],
+      "websites": [
+        {
+          "key": "youtube.com",
+          "score": 0.438,
+          "count": 2
+        },
+        {
+          "key": "blender.org",
+          "score": 0.25,
+          "count": 1
+        },
+        {
+          "key": "github.com",
+          "score": 0.25,
+          "count": 1
+        }
+      ],
+      "browsers": [
+        {
+          "key": "Chrome",
+          "score": 0.763,
+          "count": 5
+        }
+      ],
+      "editors": [
+        {
+          "key": "Code",
+          "score": 0.578,
+          "count": 3
+        }
+      ],
+      "folders": [
+        {
+          "key": "desktop/Projects",
+          "score": 0.438,
+          "count": 2
+        }
+      ],
+      "monitors": [
+        {
+          "key": "2",
+          "score": 0.25,
+          "count": 1
+        }
+      ],
+      "workflows": [
+        {
+          "key": "open_app > open_app > open_app",
+          "score": 0.9,
+          "count": 8
+        },
+        {
+          "key": "open_website > open_website > open_website",
+          "score": 0.438,
+          "count": 2
+        },
+        {
+          "key": "hotkey > hotkey > hotkey",
+          "score": 0.25,
+          "count": 1
+        },
+        {
+          "key": "move_window_to_monitor > hotkey > hotkey",
+          "score": 0.25,
+          "count": 1
+        },
+        {
+          "key": "open_folder > move_window_to_monitor > hotkey",
+          "score": 0.25,
+          "count": 1
+        }
+      ],
+      "hotkeys": [
+        {
+          "key": "ctrl+c",
+          "score": 0.438,
+          "count": 2
+        },
+        {
+          "key": "ctrl+v",
+          "score": 0.25,
+          "count": 1
+        }
+      ],
+      "updated_at": 1785589491.443073
+    },
+    "predictions": [
+      {
+        "category": "app",
+        "key": "Chrome",
+        "score": 0.763,
+        "schedule_affinity": 7.5,
+        "prediction": 1.658,
+        "count": 5
+      },
+      {
+        "category": "app",
+        "key": "Code",
+        "score": 0.578,
+        "schedule_affinity": 4.5,
+        "prediction": 1.547,
+        "count": 3
+      },
+      {
+        "category": "folder",
+        "key": "desktop/Projects",
+        "score": 0.437,
+        "schedule_affinity": 3.0,
+        "prediction": 1.462,
+        "count": 2
+      },
+      {
+        "category": "website",
+        "key": "youtube.com",
+        "score": 0.437,
+        "schedule_affinity": 3.0,
+        "prediction": 1.462,
+        "count": 2
+      },
+      {
+        "category": "app",
+        "key": "Discord",
+        "score": 0.437,
+        "schedule_affinity": 3.0,
+        "prediction": 1.462,
+        "count": 2
+      }
+    ],
+    "coding": {
+      "preferred_editor": "Code",
+      "editors": [
+        {
+          "key": "Code",
+          "score": 0.578,
+          "count": 3
+        }
+      ],
+      "coding_commands": 0,
+      "hotkeys": [
+        {
+          "key": "ctrl+c",
+          "count": 2
+        },
+        {
+          "key": "ctrl+v",
+          "count": 1
+        }
+      ]
+    },
+    "ranked": [
+      {
+        "category": "workflow",
+        "key": "open_app > open_app > open_app",
+        "score": 0.9,
+        "count": 8
+      },
+      {
+        "category": "app",
+        "key": "Chrome",
+        "score": 0.763,
+        "count": 5
+      },
+      {
+        "category": "browser",
+        "key": "Chrome",
+        "score": 0.763,
+        "count": 5
+      },
+      {
+        "category": "app",
+        "key": "Code",
+        "score": 0.578,
+        "count": 3
+      },
+      {
+        "category": "editor",
+        "key": "Code",
+        "score": 0.578,
+        "count": 3
+      },
+      {
+        "category": "hotkey",
+        "key": "ctrl+c",
+        "score": 0.438,
+        "count": 2
+      },
+      {
+        "category": "folder",
+        "key": "desktop/Projects",
+        "score": 0.438,
+        "count": 2
+      },
+      {
+        "category": "workflow",
+        "key": "open_website > open_website > open_website",
+        "score": 0.438,
+        "count": 2
+      },
+      {
+        "category": "website",
+        "key": "youtube.com",
+        "score": 0.438,
+        "count": 2
+      },
+      {
+        "category": "app",
+        "key": "Discord",
+        "score": 0.438,
+        "count": 2
+      },
+      {
+        "category": "utterance",
+        "key": "search",
+        "score": 0.25,
+        "count": 1
+      },
+      {
+        "category": "utterance",
+        "key": "open",
+        "score": 0.25,
+        "count": 1
+      }
+    ],
+    "predict_app": "Chrome",
+    "predict_workflow": "open_app > open_app > open_app"
+  },
+  "untouched_ok": true,
+  "pass": true
+}

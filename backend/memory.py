@@ -187,6 +187,13 @@ def context_blob(request: str = "") -> str:
     except Exception:
         pass
     try:
+        from neuron.learning_engine import for_prompt as learning_for_prompt
+        blob = learning_for_prompt()
+        if blob:
+            lines.append(blob)
+    except Exception:
+        pass
+    try:
         import skills
         if request and any(w in request.lower() for w in (
             "youtube", "steam", "discord", "friends", "scroll", "fullscreen",
