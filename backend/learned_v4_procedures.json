@@ -10,7 +10,6 @@
         "run my youtube search workflow"
       ],
       "params": [
-        "monitor",
         "query"
       ],
       "steps": [
@@ -21,14 +20,6 @@
           },
           "expected_result": "",
           "capability_id": "windows.open_app"
-        },
-        {
-          "action": "windows.move_to_monitor",
-          "args": {
-            "monitor": "{monitor}"
-          },
-          "expected_result": "",
-          "capability_id": "windows.move_to_monitor"
         },
         {
           "action": "youtube.search",
@@ -50,7 +41,6 @@
       "preconditions": [],
       "completion_criteria": [
         "SUCCESS",
-        "SUCCESS",
         "SUCCESS"
       ],
       "meta": {
@@ -62,5 +52,5 @@
     }
   ],
   "schema": 1,
-  "updated": "2026-07-31T20:53:09"
+  "updated": "2026-08-01T17:46:46"
 }

@@ -175,6 +175,29 @@
         return;
       }
 
+      if (msg.type === "tts_chunk" && msg.audio_url) {
+        speaking = true;
+        setStatus("SPEAKING");
+        try {
+          if (currentAudio) {
+            try { currentAudio.pause(); } catch (_) {}
+          }
+          const a = new Audio(msg.audio_url);
+          currentAudio = a;
+          a.onended = a.onerror = () => {
+            if (currentAudio === a) currentAudio = null;
+          };
+          a.play().catch(() => {});
+        } catch (_) {}
+        return;
+      }
+
+      if (msg.type === "tts_done" || msg.type === "tts_interrupted") {
+        speaking = false;
+        if (active && !muted) setStatus("LISTENING");
+        return;
+      }
+
       if (msg.type === "response") {
         busy = false;
         if (msg.heard) {
@@ -187,6 +210,13 @@
         }
         if (msg.text) {
           responseEl.textContent = msg.text;
+          // Text arrives before TTS; wait for tts_ready when engine is pending
+          if (msg.tts_engine === "pending" && msg.acted) {
+            speaking = true;
+            setStatus("SPEAKING");
+            window.__neuronPendingSpeak = speakable(msg.text);
+            return;
+          }
           if (msg.audio_url) {
             try {
               if (currentAudio) {
@@ -211,6 +241,41 @@
           }
         } else if (active && !muted) {
           setStatus("LISTENING");
+        }
+      }
+      if (msg.type === "tts_ready") {
+        const pendingText = window.__neuronPendingSpeak || "";
+        window.__neuronPendingSpeak = null;
+        if (msg.audio_url) {
+          try {
+            if (currentAudio) {
+              try {
+                currentAudio.pause();
+              } catch (_) {}
+            }
+            const a = new Audio(msg.audio_url);
+            currentAudio = a;
+            a.onended = a.onerror = () => {
+              if (currentAudio === a) currentAudio = null;
+              speaking = false;
+              if (active && !muted) setStatus("LISTENING");
+            };
+            speaking = true;
+            a.play().catch(() => {
+              if (pendingText) speak(pendingText);
+              else if (active && !muted) setStatus("LISTENING");
+            });
+            return;
+          } catch (_) {}
+        }
+        // System TTS played on server, or browser fallback
+        if (msg.tts_engine === "browser" || msg.tts_engine === "system" || !msg.audio_url) {
+          if (pendingText && (msg.tts_engine === "browser" || !msg.audio_url)) {
+            speak(pendingText);
+          } else {
+            speaking = false;
+            if (active && !muted) setStatus("LISTENING");
+          }
         }
       }
       if (msg.type === "confirm") {
@@ -239,6 +304,28 @@
       ws.send(JSON.stringify({ type: "control", ...payload }));
     }
   }
+
+  // Push-to-talk: hold Space (when not typing in an input)
+  let pttMode = false;
+  let pttHeld = false;
+  window.setNeuronListenMode = function (mode) {
+    pttMode = String(mode || "").toLowerCase() === "ptt";
+    sendControl({ listen_mode: mode });
+  };
+  window.addEventListener("keydown", (e) => {
+    if (!pttMode || e.code !== "Space" || e.repeat) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return;
+    e.preventDefault();
+    pttHeld = true;
+    sendControl({ ptt: true, mute: false });
+  });
+  window.addEventListener("keyup", (e) => {
+    if (!pttMode || e.code !== "Space") return;
+    e.preventDefault();
+    pttHeld = false;
+    sendControl({ ptt: false });
+  });
 
   function sendToBrain(text) {
     const cleaned = (text || "").trim();

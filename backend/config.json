@@ -27,19 +27,19 @@
   "stt": {
     "enabled": true,
     "provider": "faster-whisper",
-    "model": "turbo",
+    "model": "small",
     "device": "cuda",
     "compute_type": "float16",
     "language": "en",
     "beam_size": 1,
     "speech_rms": 0.009,
     "silence_rms": 0.0045,
-    "silence_ms": 480,
+    "silence_ms": 320,
     "min_speech_ms": 280,
     "max_speech_ms": 12000,
     "pre_roll_ms": 220,
-    "hangover_ms": 180,
-    "_comment": "Phase 6: prefer faster-whisper (local/free). Energy VAD + hangover before execute. Partials never execute."
+    "hangover_ms": 100,
+    "_comment": "faster-whisper only. small+cuda float16. Tight VAD (~420ms floor). Partials never execute."
   },
   "auto_learn": {
     "enabled": true,
@@ -68,9 +68,17 @@
   "voice": {
     "wake_word_required": false,
     "hands_free": true,
-    "conversation_mode": false,
+    "conversation_mode": true,
     "conversation_timeout_seconds": 45,
-    "partial_interval_seconds": 0.85,
+    "partial_interval_seconds": 1.2,
+    "partials_enabled": true,
+    "streaming_voice_engine": true,
+    "listen_mode": "continuous",
+    "early_intent_enabled": true,
+    "streaming_tts_ws": true,
+    "echo_cancellation": true,
+    "noise_suppression": true,
+    "barge_in_level": 0.25,
     "openwakeword_enabled": false,
     "openwakeword_threshold": 0.5,
     "openwakeword_models": [
@@ -82,7 +90,11 @@
     "media_quiet_release_ms": 1500,
     "media_require_wake": true,
     "media_speech_rms_scale": 1.0,
-    "_comment": "When speakers are loud, reject YouTube dialogue and require 'Neuron' for most commands \u2014 but short safe ones (scroll down, mute, skip ad) still work. media_speech_rms_scale=1.0 keeps your voice audible (raising it made NEURON miss you)."
+    "_comment": "streaming_voice_engine wraps Phase 6 pipeline. listen_mode: continuous|ptt|conversation. Early intent runs FastIntent on short partials. Echo/noise are DSP hooks (+ browser getUserMedia flags)."
+  },
+  "logging": {
+    "level": "INFO",
+    "_comment": "DEBUG|INFO|WARNING|ERROR. Production: INFO or WARNING to cut hot-path prints."
   },
   "tts": {
     "enabled": true,
@@ -113,6 +125,9 @@
     "hierarchical_voice_enabled": false,
     "voice_routing_mode": "LEGACY",
     "procedure_learning_enabled": false,
+    "fast_desktop_router": true,
+    "semantic_understanding": true,
+    "task_planning_engine": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,

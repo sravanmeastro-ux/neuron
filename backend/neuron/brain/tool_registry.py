@@ -497,6 +497,57 @@ def _bootstrap_new() -> None:
             control_methods=_default_methods(name),
         )
 
+    try:
+        from neuron.screen.engine import tool_screen_understand
+        register(
+            "screen_understand",
+            tool_screen_understand,
+            description="Screen Understanding: screenshot+OCR+UIA+grounded click/read/scroll",
+            args_schema={"request": "str", "query": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["uia", "ocr", "perception"],
+        )
+    except Exception as exc:
+        print(f"[tools] screen_understand skipped: {exc}", flush=True)
+
+    try:
+        from neuron.taskplan.engine import tool_run_task_workflow
+        from neuron.taskplan.file_ops import task_move_files, task_zip_folder
+        register(
+            "run_task_workflow",
+            tool_run_task_workflow,
+            description="Task Planning Engine: multi-step desktop workflows with verify/recover",
+            args_schema={"request": "str", "goal": "str", "confirmed": "bool"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["uia", "api", "filesystem"],
+        )
+        register(
+            "task_move_files",
+            lambda a: task_move_files(a or {}),
+            description="Move files matching a pattern into a folder (desktop workflows)",
+            args_schema={"pattern": "str", "dest": "str", "location": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["filesystem"],
+        )
+        register(
+            "task_zip_folder",
+            lambda a: task_zip_folder(a or {}),
+            description="Zip a folder on Desktop/Documents",
+            args_schema={"name": "str", "location": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["filesystem"],
+        )
+    except Exception as exc:
+        print(f"[tools] taskplan tools skipped: {exc}", flush=True)
+
 
 def _default_methods(name: str) -> list[str]:
     n = name or ""

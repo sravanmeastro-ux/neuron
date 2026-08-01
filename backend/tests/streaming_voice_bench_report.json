@@ -1,0 +1,29 @@
+{
+  "modes_ok": true,
+  "audio_hook_ms_mean": 0.466,
+  "early_allow": 1.0,
+  "early_block": 1.0,
+  "early_intent_latency_ms": 1333.01,
+  "early_intent_acted": true,
+  "push_pcm_ms_mean": 4.206,
+  "interrupt_latency_ms_sim": 10.45,
+  "tts_stream_ms": 188.59,
+  "tts_event_types": [
+    "tts_chunk",
+    "tts_done",
+    "tts_metrics"
+  ],
+  "llm_stream_ok": false,
+  "llm_stream_ms": 4033.89,
+  "llm_tokens": 0,
+  "forbidden_untouched_ok": true,
+  "config": {
+    "streaming_voice_engine": true,
+    "listen_mode": "continuous",
+    "early_intent": true,
+    "echo": true,
+    "noise": true
+  },
+  "e2e_estimate_ms": 1337.68,
+  "pass": true
+}

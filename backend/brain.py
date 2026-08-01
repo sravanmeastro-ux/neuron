@@ -31,6 +31,74 @@ except Exception:
 # Per-turn multi-screen glance (mode 1B: before almost every command).
 _LAST_SCREEN_CTX = ""
 
+# Deterministic desktop intents that skip screen glance (and may short-circuit).
+_FAST_DESKTOP_RE = re.compile(
+    r"\b(?:volume|mute|unmute|louder|quieter)\b"
+    r"|\b(?:play|pause|next|previous|skip)\b(?:\s+(?:track|song|video))?"
+    r"|\b(?:media)\b"
+    r"|\b(?:open|launch|start|close|quit|exit|focus|switch to)\s+\w+"
+    r"|\b(?:minimize|maximize|fullscreen)\b"
+    r"|\b(?:screenshot|take a screenshot)\b"
+    r"|\b(?:lock (?:the )?(?:pc|computer)|sleep|shutdown|restart|reboot)\b"
+    r"|\b(?:brightness)\b",
+    re.I,
+)
+
+
+def _is_fast_desktop_intent(text: str) -> bool:
+    """True when CapabilityRouter / media keys can handle without screen glance."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if _FAST_DESKTOP_RE.search(t):
+        # Clicks / type / "on screen" still need glance
+        if re.search(r"\b(click|type|press|scroll|search for|on (?:the )?screen|this|that)\b", t, re.I):
+            if not re.search(r"\b(volume|mute|unmute|open|launch|close)\b", t, re.I):
+                return False
+        return True
+    try:
+        from neuron.v3.capability_router import route
+        hit = route(t, min_confidence=0.85)
+        if hit.ok and hit.capability:
+            cid = hit.capability.id or ""
+            if cid.startswith(("system.", "windows.open", "windows.close", "windows.focus", "windows.window")):
+                return True
+            if hit.capability.tool in ("volume", "media", "open_app", "close_app", "focus_app", "window"):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _fast_volume_or_media(text: str):
+    """Execute volume/media without AgentLoop. Returns (reply, acted) or None."""
+    t = (text or "").strip().lower()
+    # Mute / unmute
+    if re.search(r"\b(un\s*mute|unmute)\b", t):
+        return actions.volume("unmute"), True
+    if re.fullmatch(r"(?:please )?(?:mute|silence)(?: (?:it|audio|sound|volume))?", t):
+        return actions.volume("mute"), True
+    if re.search(r"\b(?:mute|silence)\s+(?:the\s+)?(?:volume|audio|sound|speakers?)\b", t):
+        return actions.volume("mute"), True
+    if re.search(r"\bvolume\s+up\b|\bincrease\s+(?:the\s+)?volume\b|\blouder\b", t):
+        return actions.volume("up"), True
+    if re.search(
+        r"\bvolume\s+down\b|\bdecrease\s+(?:the\s+)?volume\b|\bquieter\b|"
+        r"\blower\s+(?:the\s+)?volume\b",
+        t,
+    ):
+        return actions.volume("down"), True
+    if re.search(r"\b(?:set\s+)?volume\s+(?:to\s+)?(?:max|maximum|full)\b", t):
+        return actions.volume("unmute"), True
+    # Media keys
+    if re.fullmatch(r"(?:please )?(?:play|pause|resume)(?: (?:music|media|song|track|video))?", t):
+        return actions.media("play_pause"), True
+    if re.search(r"\b(?:next|skip)\s+(?:track|song|video)\b|\bnext\s+track\b", t):
+        return actions.media("next"), True
+    if re.search(r"\b(?:previous|last|prev)\s+(?:track|song|video)\b", t):
+        return actions.media("previous"), True
+    return None
+
 
 def _agent_config() -> dict:
     """Phase 1 agent settings from config.json (overridable in tests)."""
@@ -189,6 +257,41 @@ def handle_command(raw: str):
     if not text:
         return None, False
 
+    # Semantic Intent Understanding (local) → rewrite for FastIntentRouter.
+    # Does not replace FastIntentRouter or AgentLoop; only improves meaning.
+    _semantic = None
+    try:
+        _acfg_early = _agent_config()
+        if _acfg_early.get("semantic_understanding", True):
+            from neuron.understand import understand_for_router
+            routed_text, _semantic = understand_for_router(raw)
+            if _semantic.band == "medium" and _semantic.clarify_prompt:
+                return _semantic.clarify_prompt, True
+            if (
+                routed_text
+                and routed_text.strip().lower() != text.strip().lower()
+                and _semantic.band in ("high", "medium")
+                and _semantic.intent_id != "COMPLEX"
+            ):
+                print(
+                    f"[semantic] '{text}' -> '{routed_text}' "
+                    f"intent={_semantic.intent_id} conf={_semantic.confidence:.2f} "
+                    f"band={_semantic.band} ({_semantic.latency_ms:.1f}ms)",
+                    flush=True,
+                )
+                text = routed_text
+            try:
+                from neuron.perf import current
+                timer = current()
+                if timer is not None and _semantic is not None:
+                    timer.mark("semantic_ms", float(_semantic.latency_ms))
+                    timer.meta["semantic_intent"] = _semantic.intent_id
+                    timer.meta["semantic_band"] = _semantic.band
+            except Exception:
+                pass
+    except Exception as exc:
+        print(f"[semantic] skipped: {exc}", flush=True)
+
     agent_attempted = False
 
     # ---- confirm pending high-risk / confirm-tier tool ---------------
@@ -320,9 +423,72 @@ def handle_command(raw: str):
         import monitor_focus
         return monitor_focus.clear_focus(), True
 
+    # ---- Fast Intent Router (Category A) — no AgentLoop --------------------
+    # Deterministic desktop commands execute via ToolRegistry immediately.
+    # On failure / mid-confidence validation fail → fall through to AgentLoop.
+    try:
+        from neuron.brain import fast_router as _fast
+        from neuron.brain import intent as _intent_mod
+        _intent_early = None
+        try:
+            _intent_early = _intent_mod.understand(text)
+        except Exception:
+            _intent_early = None
+        fr = _fast.try_handle(text, intent=_intent_early, confirmed=False)
+        if fr is not None and fr.ok and fr.acted and not fr.meta.get("fallback_agent"):
+            try:
+                from neuron.perf import current
+                timer = current()
+                if timer is not None:
+                    timer.meta["path"] = "fast_router"
+                    timer.meta["used_agent_loop"] = False
+                    timer.meta["capability"] = fr.meta.get("capability")
+                    if fr.meta.get("elapsed_ms") is not None:
+                        timer.mark("fast_exec_ms", float(fr.meta["elapsed_ms"]))
+            except Exception:
+                pass
+            try:
+                memory.log("neuron", fr.say or "")
+            except Exception:
+                pass
+            try:
+                from neuron.understand import context_mem as _sem_mem
+                _sem_mem.remember_success(
+                    rewritten=text,
+                    intent_id=(_semantic.intent_id if _semantic else "FAST"),
+                    entities=(_semantic.entities if _semantic else None),
+                    user=raw,
+                )
+            except Exception:
+                pass
+            return fr.say, True
+    except Exception as exc:
+        print(f"[fast_router] skipped: {exc}", flush=True)
+
     # Mode 1B: glance at screens before almost every command (structural always;
-    # VLM when the user refers to on-screen stuff).
-    _refresh_screen_glance(text)
+    # VLM when the user refers to on-screen stuff). Skip for deterministic desktop.
+    glance_ms = 0.0
+    _skip_glance = False
+    try:
+        from neuron.brain.fast_router import should_skip_glance
+        _skip_glance = should_skip_glance(text)
+    except Exception:
+        _skip_glance = _is_fast_desktop_intent(text)
+    if not _skip_glance:
+        import time as _time
+        _tg = _time.perf_counter()
+        _refresh_screen_glance(text)
+        glance_ms = (_time.perf_counter() - _tg) * 1000.0
+    try:
+        from neuron.perf import current
+        timer = current()
+        if timer is not None and glance_ms:
+            timer.mark("glance_ms", glance_ms)
+        elif timer is not None:
+            timer.mark("glance_ms", 0.0)
+            timer.meta["glance_skipped"] = True
+    except Exception:
+        pass
 
     # ---- Critical YouTube: skip ad BEFORE AgentLoop -----------------------
     # Root cause of "said skip the ad but it scrolled": agent_first sent this
@@ -406,6 +572,26 @@ def handle_command(raw: str):
                 return (say or None), acted
         except Exception as exc:
             print(f"[agent] AgentLoop error -> legacy: {exc}", flush=True)
+
+    # ---- Screen Understanding Engine (visual commands) -------------------
+    # Enhances automation for "click the blue button", tabs, popups, etc.
+    # Does not replace FastIntentRouter / semantic layer.
+    try:
+        from neuron.screen import handle as screen_handle, is_visual_command
+        if is_visual_command(text):
+            sr = screen_handle(text)
+            if sr is not None and sr.acted:
+                print(
+                    f"[screen] action={getattr(sr.plan, 'action', '?')} "
+                    f"ok={sr.ok} ms={sr.meta.get('timings_ms')}",
+                    flush=True,
+                )
+                return sr.say, True
+            if sr is not None and not sr.ok and sr.say:
+                # Fall through to vision/AgentLoop legacy only if we didn't act
+                pass
+    except Exception as exc:
+        print(f"[screen] engine skipped: {exc}", flush=True)
 
     # ---- multi-screen / any-app vision Q&A ---------------------------
     # YouTube tile count uses DOM (precise). Everything else uses active-app vision.

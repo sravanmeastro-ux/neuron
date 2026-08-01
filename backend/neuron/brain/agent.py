@@ -31,7 +31,11 @@ def _agent_cfg() -> dict:
 
 
 def _log(msg: str) -> None:
-    print(f"[agent] {msg}", flush=True)
+    try:
+        from neuron.perf import log
+        log("agent", msg, level="INFO")
+    except Exception:
+        print(f"[agent] {msg}", flush=True)
 
 
 def run(
@@ -232,11 +236,47 @@ def run(
     except Exception as exc:
         _log(f"v4 hierarchical voice skipped: {exc}")
 
-    # V3 CapabilityRouter — high-confidence capabilities → fixed plan → AgentLoop.
-    # Unsupported → fall through to recipe/deterministic/LLM (V2 paths unchanged).
+    # Task Planning Engine — multi-step workflows (composes AgentLoop / tools / screen)
+    # Does not modify FastIntentRouter, Semantic Understanding, or Screen Understanding.
+    try:
+        from neuron.taskplan import maybe_handle_taskplan
+        tp = maybe_handle_taskplan(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if tp is not None:
+            say, acted, tmeta = tp
+            meta.update({k: v for k, v in (tmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (tmeta or {}).get("needs_confirm"),
+                "recovered": bool((tmeta or {}).get("recovered")),
+                "steps": (((tmeta or {}).get("report") or {}).get("subtasks") or []),
+            }
+            tr.user(raw)
+            tr.final("taskplan", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((tmeta or {}).get("path") or "taskplan"),
+            )
+    except Exception as exc:
+        _log(f"taskplan skipped: {exc}")
+
+    # V3 CapabilityRouter — high-confidence capabilities.
+    # Category A: FastIntentRouter executes tools directly (no AgentLoop).
+    # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.
     if cfg.get("capability_router", True):
         try:
             from neuron.v3 import capability_router as cap_mod
+            from neuron.brain import fast_router as fast_mod
+
             routed = cap_mod.route(resolved_request, intent=intent)
             if routed.ok and routed.steps and routed.capability:
                 meta["path"] = "capability"
@@ -248,7 +288,63 @@ def run(
                     f"conf={routed.capability.confidence:.2f} "
                     f"src={routed.capability.source}"
                 )
-                plan = normalize_plan(routed.as_plan())
+
+                # Prefer fast path (no observe/plan/verify)
+                fr = fast_mod.try_handle(
+                    resolved_request, intent=intent, confirmed=confirmed
+                )
+                if (
+                    fr is not None
+                    and fr.ok
+                    and fr.acted
+                    and not fr.meta.get("fallback_agent")
+                    and not fr.used_agent_loop
+                ):
+                    meta["path"] = "fast_router"
+                    meta["used_agent_loop"] = False
+                    meta["fast"] = fr.meta
+                    meta["elapsed_ms"] = int((time.time() - t0) * 1000)
+                    try:
+                        from neuron.perf import current
+                        timer = current()
+                        if timer is not None:
+                            timer.meta["path"] = "fast_router"
+                            timer.meta["used_agent_loop"] = False
+                            if fr.meta.get("elapsed_ms") is not None:
+                                timer.mark("fast_exec_ms", float(fr.meta["elapsed_ms"]))
+                    except Exception:
+                        pass
+                    tr.user(raw)
+                    tr.final("fast_router", fr.say or "")
+                    meta["trace"] = tr.to_list()
+                    _log(
+                        f"fast_router capability={routed.capability.id} "
+                        f"({meta['elapsed_ms']}ms) no AgentLoop"
+                    )
+                    try:
+                        import memory
+                        if fr.say:
+                            memory.log("neuron", fr.say)
+                    except Exception:
+                        pass
+                    return fr.say, True, meta
+
+                # Fallback: AgentLoop (preserve full verify/recover)
+                _log("fast_router miss/fail → AgentLoop fallback")
+                plan_dict = routed.as_plan() or {"say": "", "steps": list(routed.steps)}
+                try:
+                    for step in plan_dict.get("steps") or []:
+                        if (step.get("tool") or "") == "open_app":
+                            args = dict(step.get("arguments") or step.get("args") or {})
+                            args.setdefault("wait_seconds", 3)
+                            if "arguments" in step or "args" not in step:
+                                step["arguments"] = args
+                            else:
+                                step["args"] = args
+                except Exception:
+                    pass
+                plan = normalize_plan(plan_dict)
+                t_loop = time.time()
                 say, acted, loop_meta, goal = loop.run(
                     request=resolved_request,
                     context="",
@@ -256,18 +352,48 @@ def run(
                     plan=plan,
                     observe_blob=(
                         f"capability={routed.capability.id} "
-                        f"tool={routed.capability.tool}"
+                        f"tool={routed.capability.tool} "
+                        f"fallback=agent_loop"
                     ),
                     confirmed=confirmed,
                 )
+                meta["used_agent_loop"] = True
+                meta["fast_fallback"] = True
+                try:
+                    from neuron.perf import current
+                    timer = current()
+                    if timer is not None:
+                        timer.mark("act_verify_ms", (time.time() - t_loop) * 1000.0)
+                        timer.meta["path"] = "capability_fallback"
+                        timer.meta["used_agent_loop"] = True
+                except Exception:
+                    pass
                 return _finish(
                     say, acted, meta, loop_meta, goal, tr, t0, path="capability"
                 )
         except Exception as exc:
             _log(f"capability_router skipped: {exc}")
 
-    # Fast path: known recipe / trivial open — still through AgentLoop (verify required)
+    # Fast path: known recipe / trivial open — try FastRouter first, else AgentLoop
     if intent.kind in ("recipe", "deterministic") and intent.action:
+        try:
+            from neuron.brain import fast_router as fast_mod
+            fr = fast_mod.try_handle(
+                resolved_request, intent=intent, confirmed=confirmed
+            )
+            if fr is not None and fr.ok and fr.acted and not fr.meta.get("fallback_agent"):
+                meta["path"] = "fast_router"
+                meta["used_agent_loop"] = False
+                meta["elapsed_ms"] = int((time.time() - t0) * 1000)
+                try:
+                    import memory
+                    if fr.say:
+                        memory.log("neuron", fr.say)
+                except Exception:
+                    pass
+                return fr.say, True, meta
+        except Exception:
+            pass
         meta["path"] = intent.kind
         plan = normalize_plan({
             "say": "",
@@ -281,6 +407,7 @@ def run(
             observe_blob=f"intent={intent.kind} action={intent.action}",
             confirmed=confirmed,
         )
+        meta["used_agent_loop"] = True
         return _finish(say, acted, meta, loop_meta, goal, tr, t0, path=intent.kind)
 
     # LLM planner path (+ Phase 8 context)
