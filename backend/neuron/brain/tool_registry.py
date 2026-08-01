@@ -371,6 +371,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_unreal_agent()
     _bootstrap_github_agent()
     _bootstrap_project_intelligence()
+    _bootstrap_self_healing()
+
+
+def _bootstrap_self_healing() -> None:
+    try:
+        from neuron.self_healing import tool_self_heal_run, tool_self_heal_status
+        register(
+            "self_heal_status",
+            tool_self_heal_status,
+            description="Self-healing status: watchdog + restartable modules",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "self_heal_run",
+            tool_self_heal_run,
+            description="Self-healing: scan faults, recover, start/stop watchdog, restart modules",
+            args_schema={"request": "str", "capability": "str", "name": "str", "auto_recover": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+        print("[tools] self-healing tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] self_healing bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_project_intelligence() -> None:

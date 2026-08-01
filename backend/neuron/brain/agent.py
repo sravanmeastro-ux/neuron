@@ -51,6 +51,11 @@ def run(
     Returns (reply, acted, meta).
     meta.path: capability | recipe | deterministic | llm | opavr | ask_user | rules_fallback | empty | stop
     """
+    try:
+        from neuron.self_healing.watchdog import tick_main_heartbeat
+        tick_main_heartbeat()
+    except Exception:
+        pass
     meta: dict[str, Any] = {
         "path": "",
         "needs_confirm": None,
@@ -444,6 +449,38 @@ def run(
             )
     except Exception as exc:
         _log(f"project_intelligence skipped: {exc}")
+
+    # Self-Healing — crash/freeze/leak/deadlock/CPU/RAM detect + watchdog recover
+    try:
+        from neuron.self_healing import maybe_handle_self_healing
+        shh = maybe_handle_self_healing(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if shh is not None:
+            say, acted, shmeta = shh
+            meta.update({k: v for k, v in (shmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (shmeta or {}).get("needs_confirm"),
+                "recovered": bool((shmeta or {}).get("result", {}).get("acted")),
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("self_healing", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((shmeta or {}).get("path") or "self_healing"),
+            )
+    except Exception as exc:
+        _log(f"self_healing skipped: {exc}")
 
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:

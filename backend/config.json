@@ -147,6 +147,7 @@
     "unreal_agent": true,
     "github_agent": true,
     "project_intelligence": true,
+    "self_healing": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -202,5 +203,20 @@
     "enabled": true,
     "root": "",
     "_comment": "Empty root = auto-detect workspace. Indexes folders/source/deps/assets/build/docs; memory + graphs under backend/data/project_intelligence/."
+  },
+  "self_healing": {
+    "enabled": true,
+    "auto_start_watchdog": false,
+    "interval_s": 2.0,
+    "thresholds": {
+      "cpu_percent": 85.0,
+      "ram_mb": 1500.0,
+      "freeze_heartbeat_s": 8.0,
+      "leak_growth_mb": 80.0,
+      "leak_samples": 8,
+      "deadlock_cpu_max": 3.0,
+      "deadlock_heartbeat_s": 6.0
+    },
+    "_comment": "Watchdog logs under backend/data/self_healing/. Soft-restarts registered modules (gc, caches, tool_registry)."
   }
 }
