@@ -63,7 +63,12 @@
   },
   "assistant": {
     "name": "NEURON",
-    "personality": "witty, confident, loyal, concise. Dry British humor like JARVIS. Never rude. Hands-free: user does NOT need to say your name \u2014 they already granted full PC access; act on plain commands like open chrome."
+    "personality": "witty, confident, loyal, concise. Dry British humor like JARVIS. Never rude. Hands-free: user does NOT need to say your name \u2014 they already granted full PC access; act on plain commands like open chrome.",
+    "mode": "jarvis",
+    "personality_engine": true,
+    "humor": true,
+    "emotion_aware": true,
+    "_comment": "mode: professional | friendly | jarvis (Iron Man). Personality engine wraps final replies; conversation buffer in data/personality_conversation.json."
   },
   "voice": {
     "wake_word_required": false,
@@ -135,6 +140,7 @@
     "long_term_memory": true,
     "plugin_sdk": true,
     "workflow_recording": true,
+    "personality_engine": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,

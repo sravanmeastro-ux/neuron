@@ -67,6 +67,21 @@ def run(
     tr = Trace()
     loop = AgentLoop(confirmed=confirmed, trace=tr)
 
+    # Personality mode switches ("switch to professional mode")
+    try:
+        from neuron.personality import maybe_handle_mode_command
+        pmc = maybe_handle_mode_command(raw)
+        if pmc is not None:
+            say, acted, pmeta = pmc
+            meta.update(pmeta or {})
+            meta["elapsed_ms"] = int((time.time() - t0) * 1000)
+            tr.user(raw)
+            tr.final("personality", say or "")
+            meta["trace"] = tr.to_list()
+            return say, acted, meta
+    except Exception as exc:
+        _log(f"personality mode cmd skipped: {exc}")
+
     # V4.7 ConversationEngine — shared context/NLU boundary (does not replace routing yet)
     v4u = None
     try:
@@ -661,6 +676,31 @@ def _finish(
             mem_utt(req2 or path, acted=True)
     except Exception:
         pass
+
+    # Personality — modes / emotion / speaking style / humor / conversation memory
+    try:
+        from neuron.personality import format_reply
+        user_txt = ""
+        try:
+            for entry in tr.to_list():
+                role = (entry.get("role") or entry.get("kind") or "").lower()
+                if role in ("user",):
+                    user_txt = str(entry.get("text") or entry.get("content") or "")
+                    if user_txt:
+                        break
+        except Exception:
+            pass
+        if say and not str(say).startswith("__"):
+            say = format_reply(
+                say,
+                user=user_txt,
+                acted=acted,
+                path=path,
+                meta=meta,
+            )
+    except Exception as exc:
+        _log(f"personality skipped: {exc}")
+
     try:
         import memory
         if say:

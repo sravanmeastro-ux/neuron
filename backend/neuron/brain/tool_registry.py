@@ -364,6 +364,46 @@ def ensure_bootstrapped() -> None:
     _bootstrap_v35_primitives()
     _bootstrap_plugins()
     _bootstrap_workflows()
+    _bootstrap_personality()
+
+
+def _bootstrap_personality() -> None:
+    try:
+        from neuron.personality import (
+            tool_personality_detect,
+            tool_personality_set,
+            tool_personality_status,
+        )
+        register(
+            "personality_status",
+            tool_personality_status,
+            description="Current personality mode, voice style, and conversation buffer",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "personality_set",
+            tool_personality_set,
+            description="Set personality mode: professional | friendly | jarvis",
+            args_schema={"mode": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "personality_detect",
+            tool_personality_detect,
+            description="Detect emotion from user text and return voice hints",
+            args_schema={"text": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=False,
+        )
+        print("[tools] personality tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] personality bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_workflows() -> None:
