@@ -445,6 +445,38 @@ def run(
     except Exception as exc:
         _log(f"blender_agent skipped: {exc}")
 
+    # Unreal Agent — UE5 expert workflows (compose-only; does not modify cores)
+    try:
+        from neuron.unreal_agent import maybe_handle_unreal
+        ue = maybe_handle_unreal(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if ue is not None:
+            say, acted, umeta = ue
+            meta.update({k: v for k, v in (umeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (umeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("unreal_agent", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((umeta or {}).get("path") or "unreal_agent"),
+            )
+    except Exception as exc:
+        _log(f"unreal_agent skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.

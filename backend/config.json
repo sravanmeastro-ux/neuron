@@ -144,6 +144,7 @@
     "neuron_os": true,
     "developer_mode": true,
     "blender_agent": true,
+    "unreal_agent": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -183,5 +184,11 @@
     "blender_path": "",
     "background": true,
     "_comment": "Empty blender_path = auto-detect blender on PATH or Program Files. Scripts/assets under backend/data/blender_agent/."
+  },
+  "unreal_agent": {
+    "enabled": true,
+    "engine_path": "",
+    "project_path": "",
+    "_comment": "Empty engine_path = auto-detect Epic Games/UE_*. Empty project_path = search for .uproject. Artifacts under backend/data/unreal_agent/."
   }
 }

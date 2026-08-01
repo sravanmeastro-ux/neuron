@@ -368,6 +368,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_neuron_os()
     _bootstrap_developer()
     _bootstrap_blender_agent()
+    _bootstrap_unreal_agent()
+
+
+def _bootstrap_unreal_agent() -> None:
+    try:
+        from neuron.unreal_agent import tool_unreal_run, tool_unreal_status
+        register(
+            "unreal_status",
+            tool_unreal_status,
+            description="Unreal Agent status: engine, EditorCmd, UAT, uproject",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "unreal_run",
+            tool_unreal_run,
+            description="Unreal Engine expert: Blueprints, C++, Niagara, packaging, FPS optimize, crash analysis",
+            args_schema={"request": "str", "capability": "str", "confirmed": "bool", "dry_run": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+        print("[tools] unreal agent tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] unreal_agent bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_blender_agent() -> None:
