@@ -1,0 +1,28 @@
+{
+  "classifier_accuracy": 1.0,
+  "planner_accuracy": 1.0,
+  "observe_ms": 250.47,
+  "screenshot_ms": 165.92,
+  "ocr_ms": 0.46,
+  "uia_ms": 4.07,
+  "action_ms_describe": 101.61,
+  "elements_detected": 0,
+  "ocr_lines": 0,
+  "ground_ok": true,
+  "ground_score": 0.0,
+  "describe_ok": true,
+  "skip_non_visual_ok": true,
+  "fast_router_untouched_ok": true,
+  "memory": {
+    "current_window": "TASK_PLANNING_ENGINE_REPORT.md - fillo jarvis - Cursor",
+    "application": "cursor",
+    "focused_control": "",
+    "button_count": 0,
+    "text_preview": [],
+    "last_query": "What application is open?",
+    "last_click_name": "",
+    "recent_shots": 3
+  },
+  "pass": true,
+  "note": "False click rate requires interactive UI; not measured in this smoke."
+}
