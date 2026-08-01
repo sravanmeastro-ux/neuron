@@ -370,6 +370,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_blender_agent()
     _bootstrap_unreal_agent()
     _bootstrap_github_agent()
+    _bootstrap_project_intelligence()
+
+
+def _bootstrap_project_intelligence() -> None:
+    try:
+        from neuron.project_intelligence import tool_project_intel_run, tool_project_intel_status
+        register(
+            "project_intel_status",
+            tool_project_intel_status,
+            description="Project Intelligence status: root + architecture memory",
+            args_schema={"root": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "project_intel_run",
+            tool_project_intel_run,
+            description="Project Intelligence: index, overview, locate features, memory leaks, project graph",
+            args_schema={"request": "str", "capability": "str", "root": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["filesystem", "api"],
+        )
+        print("[tools] project intelligence tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] project_intelligence bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_github_agent() -> None:

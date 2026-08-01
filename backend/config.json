@@ -146,6 +146,7 @@
     "blender_agent": true,
     "unreal_agent": true,
     "github_agent": true,
+    "project_intelligence": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -196,5 +197,10 @@
     "enabled": true,
     "repo_path": "",
     "_comment": "Empty repo_path = auto-detect .git from cwd/workspace. Uses git + gh CLI. Changelog drafts under backend/data/github_agent/."
+  },
+  "project_intelligence": {
+    "enabled": true,
+    "root": "",
+    "_comment": "Empty root = auto-detect workspace. Indexes folders/source/deps/assets/build/docs; memory + graphs under backend/data/project_intelligence/."
   }
 }

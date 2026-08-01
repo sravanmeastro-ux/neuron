@@ -413,6 +413,38 @@ def run(
     except Exception as exc:
         _log(f"github_agent skipped: {exc}")
 
+    # Project Intelligence — automatic codebase map (before Developer so overview/locate/leaks win)
+    try:
+        from neuron.project_intelligence import maybe_handle_project_intelligence
+        pih = maybe_handle_project_intelligence(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if pih is not None:
+            say, acted, pimeta = pih
+            meta.update({k: v for k, v in (pimeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (pimeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("project_intelligence", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((pimeta or {}).get("path") or "project_intelligence"),
+            )
+    except Exception as exc:
+        _log(f"project_intelligence skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer
