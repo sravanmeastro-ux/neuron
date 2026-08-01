@@ -1,0 +1,179 @@
+{
+  "intent_accuracy": 1.0,
+  "rewrite_accuracy": 1.0,
+  "entity_accuracy": 1.0,
+  "false_positives": [],
+  "chain_ok": true,
+  "deixis_ok": true,
+  "fast_router_still_ok": true,
+  "fast_router_ms": 1401.95,
+  "understanding_latency_ms": {
+    "mean": 0.9,
+    "max": 7.21,
+    "min": 0.14
+  },
+  "details": [
+    {
+      "utt": "Open Chrome",
+      "rewritten": "open chrome",
+      "intent": "OPEN_APPLICATION",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 7.21,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "application",
+          "value": "chrome"
+        }
+      ]
+    },
+    {
+      "utt": "Open the browser.",
+      "rewritten": "open chrome",
+      "intent": "OPEN_APPLICATION",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.18,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "application",
+          "value": "chrome"
+        }
+      ]
+    },
+    {
+      "utt": "Can you launch Chrome?",
+      "rewritten": "open chrome",
+      "intent": "OPEN_APPLICATION",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.19,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "application",
+          "value": "chrome"
+        }
+      ]
+    },
+    {
+      "utt": "I need Google.",
+      "rewritten": "open google",
+      "intent": "OPEN_WEBSITE",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.49,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "website",
+          "value": "google"
+        }
+      ]
+    },
+    {
+      "utt": "Let's browse.",
+      "rewritten": "open chrome",
+      "intent": "OPEN_APPLICATION",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.14,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "application",
+          "value": "chrome"
+        }
+      ]
+    },
+    {
+      "utt": "Open YouTube.",
+      "rewritten": "open youtube",
+      "intent": "OPEN_WEBSITE",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.16,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "website",
+          "value": "youtube"
+        }
+      ]
+    },
+    {
+      "utt": "Take me to YouTube.",
+      "rewritten": "open youtube",
+      "intent": "OPEN_WEBSITE",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.16,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "website",
+          "value": "youtube"
+        }
+      ]
+    },
+    {
+      "utt": "Search for Blender tutorials.",
+      "rewritten": "search for blender tutorials",
+      "intent": "SEARCH",
+      "conf": 0.93,
+      "band": "high",
+      "ms": 0.26,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": [
+        {
+          "kind": "application",
+          "value": "blender"
+        }
+      ]
+    },
+    {
+      "utt": "volume up",
+      "rewritten": "volume up",
+      "intent": "VOLUME",
+      "conf": 0.97,
+      "band": "medium",
+      "ms": 0.75,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": []
+    },
+    {
+      "utt": "mute",
+      "rewritten": "mute",
+      "intent": "VOLUME",
+      "conf": 0.97,
+      "band": "medium",
+      "ms": 0.14,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": []
+    },
+    {
+      "utt": "summarize this document",
+      "rewritten": "summarize this document",
+      "intent": "COMPLEX",
+      "conf": 0.45,
+      "band": "low",
+      "ms": 0.18,
+      "intent_ok": true,
+      "rewrite_ok": true,
+      "entities": []
+    }
+  ],
+  "pass": true
+}
