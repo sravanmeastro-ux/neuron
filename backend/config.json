@@ -129,6 +129,7 @@
     "semantic_understanding": true,
     "task_planning_engine": true,
     "autonomous_execution": true,
+    "multi_agent_system": true,
     "computer_use_agent": true,
     "learning_engine": true,
     "long_term_memory": true,

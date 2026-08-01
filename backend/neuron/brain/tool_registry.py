@@ -724,6 +724,44 @@ def _bootstrap_new() -> None:
         print(f"[tools] autonomous tools skipped: {exc}", flush=True)
 
     try:
+        from neuron.agents import (
+            tool_multi_agent_ask,
+            tool_multi_agent_run,
+            tool_multi_agent_status,
+        )
+        register(
+            "multi_agent_run",
+            tool_multi_agent_run,
+            description="Coordinator: route a goal across Planner/Executor/Vision/Browser/Memory/Desktop/Code/Research",
+            args_schema={"request": "str", "goal": "str", "confirmed": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "uia", "perception"],
+        )
+        register(
+            "multi_agent_status",
+            tool_multi_agent_status,
+            description="List specialized agents and recent bus messages",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "multi_agent_ask",
+            tool_multi_agent_ask,
+            description="Ask one specialist agent directly via the message bus",
+            args_schema={"role": "str", "text": "str", "query": "str", "op": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+        )
+        print("[tools] multi-agent tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] multi_agent skipped: {exc}", flush=True)
+
+    try:
         from neuron.computer_use.agent import tool_computer_use_agent
         from neuron.computer_use.primitives import tool_drag_drop, tool_upload_file
         register(

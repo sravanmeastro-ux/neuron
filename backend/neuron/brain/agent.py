@@ -301,6 +301,39 @@ def run(
     except Exception as exc:
         _log(f"computer_use skipped: {exc}")
 
+    # Multi-Agent System — specialized agents communicate via in-proc bus.
+    # Does not rewrite FastIntent / TaskPlan / Computer Use; claims multi-specialist goals only.
+    try:
+        from neuron.agents import maybe_handle_multi_agent
+        ma = maybe_handle_multi_agent(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if ma is not None:
+            say, acted, mameta = ma
+            meta.update({k: v for k, v in (mameta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (mameta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": (mameta or {}).get("agents") or [],
+            }
+            tr.user(raw)
+            tr.final("multi_agent", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((mameta or {}).get("path") or "multi_agent"),
+            )
+    except Exception as exc:
+        _log(f"multi_agent skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.
