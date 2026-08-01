@@ -349,6 +349,38 @@ def run(
     except Exception as exc:
         _log(f"multi_agent skipped: {exc}")
 
+    # NEURON OS — central orchestration of desktop OS capabilities (compose-only)
+    try:
+        from neuron.os import maybe_handle_os
+        os_hit = maybe_handle_os(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if os_hit is not None:
+            say, acted, osmeta = os_hit
+            meta.update({k: v for k, v in (osmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (osmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("neuron_os", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((osmeta or {}).get("path") or "neuron_os"),
+            )
+    except Exception as exc:
+        _log(f"neuron_os skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.

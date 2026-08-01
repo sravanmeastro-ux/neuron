@@ -365,6 +365,37 @@ def ensure_bootstrapped() -> None:
     _bootstrap_plugins()
     _bootstrap_workflows()
     _bootstrap_personality()
+    _bootstrap_neuron_os()
+
+
+def _bootstrap_neuron_os() -> None:
+    try:
+        from neuron.os import tool_os_run, tool_os_status
+        from neuron.os import capabilities as caps
+        # Register capability handlers without re-entering tool_registry bootstrap
+        caps.bootstrap_capabilities()
+        register(
+            "os_status",
+            tool_os_status,
+            description="NEURON OS status: session, capabilities, orchestration report",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "os_run",
+            tool_os_run,
+            description="NEURON OS orchestrator: capability dispatch or OS-shell request",
+            args_schema={"request": "str", "capability": "str", "confirmed": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "uia", "perception"],
+        )
+        print("[tools] NEURON OS tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] neuron_os bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_personality() -> None:

@@ -141,6 +141,7 @@
     "plugin_sdk": true,
     "workflow_recording": true,
     "personality_engine": true,
+    "neuron_os": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
