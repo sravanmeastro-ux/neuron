@@ -1,0 +1,64 @@
+{
+  "id": "photoshop",
+  "version": "1.0.0",
+  "name": "Photoshop",
+  "description": "Adobe Photoshop plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Photoshop"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "photoshop.open",
+      "aliases": [
+        "open photoshop"
+      ],
+      "prefer": [
+        "photoshop.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "photoshop.open",
+      "description": "Open Photoshop",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "photoshop.focus",
+      "description": "Focus Photoshop",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

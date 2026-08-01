@@ -1,0 +1,64 @@
+{
+  "id": "spotify",
+  "version": "1.0.0",
+  "name": "Spotify",
+  "description": "Spotify music plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Spotify"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "spotify.open",
+      "aliases": [
+        "open spotify"
+      ],
+      "prefer": [
+        "spotify.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "spotify.open",
+      "description": "Open Spotify",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "spotify.focus",
+      "description": "Focus Spotify",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

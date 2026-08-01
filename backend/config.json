@@ -131,6 +131,7 @@
     "computer_use_agent": true,
     "learning_engine": true,
     "long_term_memory": true,
+    "plugin_sdk": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -142,5 +143,10 @@
     "context_high_confidence": 0.75,
     "context_medium_confidence": 0.45,
     "_comment": "V4.10 hierarchical_voice_enabled default false; voice_routing_mode LEGACY|SHADOW|CANARY|HIERARCHICAL (fail-closed). V4.9 procedure_learning_enabled default false. V3.8 multi-monitor + semantic skills."
+  },
+  "plugins": {
+    "enabled": true,
+    "paths": [],
+    "_comment": "Builtin plugins live under neuron/plugins/builtin. Extra dirs listed in paths must each contain plugin.json packages."
   }
 }

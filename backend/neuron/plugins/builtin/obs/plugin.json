@@ -1,0 +1,65 @@
+{
+  "id": "obs",
+  "version": "1.0.0",
+  "name": "OBS Studio",
+  "description": "OBS Studio streaming plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "OBS Studio"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "obs.open",
+      "aliases": [
+        "open obs",
+        "open obs studio"
+      ],
+      "prefer": [
+        "obs.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "obs.open",
+      "description": "Open OBS Studio",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "obs.focus",
+      "description": "Focus OBS",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

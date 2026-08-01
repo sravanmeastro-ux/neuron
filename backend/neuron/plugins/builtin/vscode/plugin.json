@@ -1,0 +1,65 @@
+{
+  "id": "vscode",
+  "version": "1.0.0",
+  "name": "VS Code",
+  "description": "Visual Studio Code plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Code"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "vscode.open",
+      "aliases": [
+        "open vscode",
+        "open code"
+      ],
+      "prefer": [
+        "vscode.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "vscode.open",
+      "description": "Open Visual Studio Code",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "vscode.focus",
+      "description": "Focus VS Code",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

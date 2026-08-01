@@ -1,0 +1,64 @@
+{
+  "id": "discord",
+  "version": "1.0.0",
+  "name": "Discord",
+  "description": "Discord chat plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Discord"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "discord.open",
+      "aliases": [
+        "open discord"
+      ],
+      "prefer": [
+        "discord.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "discord.open",
+      "description": "Open Discord",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "discord.focus",
+      "description": "Focus Discord",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

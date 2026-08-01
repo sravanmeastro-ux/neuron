@@ -121,6 +121,19 @@ def register(
             _ALIASES[a] = name
 
 
+def unregister(name: str) -> bool:
+    """Remove a tool registration (plugin unload). Returns True if removed."""
+    key = resolve_name(name) if name else ""
+    target = key if key in _REGISTRY else (name or "")
+    if target not in _REGISTRY:
+        return False
+    _REGISTRY.pop(target, None)
+    for alias, dest in list(_ALIASES.items()):
+        if dest == target or alias == target:
+            _ALIASES.pop(alias, None)
+    return True
+
+
 def _infer_type_label(hint: str) -> str:
     h = (hint or "").lower()
     if "int" in h:
@@ -349,6 +362,50 @@ def ensure_bootstrapped() -> None:
     _bootstrap_skills()
     _bootstrap_procedures()
     _bootstrap_v35_primitives()
+    _bootstrap_plugins()
+
+
+def _bootstrap_plugins() -> None:
+    """Plugin SDK — discover builtin + config paths, register manager tools."""
+    try:
+        from neuron.plugins.manager import (
+            bootstrap,
+            tool_plugin_docs,
+            tool_plugin_reload,
+            tool_plugins_list,
+        )
+        register(
+            "plugins_list",
+            tool_plugins_list,
+            description="List installed plugins, versions, and intents",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "plugin_reload",
+            tool_plugin_reload,
+            description="Hot-reload a plugin by id",
+            args_schema={"id": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=False,
+        )
+        register(
+            "plugin_docs",
+            tool_plugin_docs,
+            description="Read a plugin README / documentation",
+            args_schema={"id": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=False,
+        )
+        loaded = bootstrap()
+        ok_n = sum(1 for p in loaded if p.get("enabled"))
+        print(f"[tools] plugins loaded {ok_n}/{len(loaded)}", flush=True)
+    except Exception as exc:
+        print(f"[tools] plugins bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_skills() -> None:

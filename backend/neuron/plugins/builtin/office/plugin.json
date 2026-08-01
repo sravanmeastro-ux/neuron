@@ -1,0 +1,74 @@
+{
+  "id": "office",
+  "version": "1.0.0",
+  "name": "Microsoft Office",
+  "description": "Office suite plugin (Word/Excel/PowerPoint)",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "WINWORD"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "office.word",
+      "aliases": [
+        "open word"
+      ],
+      "prefer": [
+        "office.word"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "office.word",
+      "description": "Open Microsoft Word",
+      "handler": "actions:word",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "office.excel",
+      "description": "Open Microsoft Excel",
+      "handler": "actions:excel",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "office.powerpoint",
+      "description": "Open PowerPoint",
+      "handler": "actions:powerpoint",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

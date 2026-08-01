@@ -1,0 +1,74 @@
+{
+  "id": "blender",
+  "version": "1.0.0",
+  "name": "Blender",
+  "description": "Blender 3D plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Blender"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "blender.open",
+      "aliases": [
+        "open blender"
+      ],
+      "prefer": [
+        "blender.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "blender.open",
+      "description": "Open Blender",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "blender.download_page",
+      "description": "Open Blender download page",
+      "handler": "actions:download_page",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "blender.focus",
+      "description": "Focus Blender",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

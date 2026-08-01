@@ -1,0 +1,77 @@
+{
+  "id": "chrome",
+  "version": "1.0.0",
+  "name": "Chrome",
+  "description": "Google Chrome browser plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Chrome"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "chrome.open",
+      "aliases": [
+        "open chrome",
+        "launch chrome"
+      ],
+      "prefer": [
+        "chrome.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "chrome.open",
+      "description": "Open Google Chrome",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "chrome.new_tab",
+      "description": "Open a URL in Chrome",
+      "handler": "actions:new_tab",
+      "args_schema": {
+        "url": "str"
+      },
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "chrome.focus",
+      "description": "Focus Chrome",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

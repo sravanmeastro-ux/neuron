@@ -1,0 +1,64 @@
+{
+  "id": "steam",
+  "version": "1.0.0",
+  "name": "Steam",
+  "description": "Steam gaming plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Steam"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "steam.open",
+      "aliases": [
+        "open steam"
+      ],
+      "prefer": [
+        "steam.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "steam.open",
+      "description": "Open Steam",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "steam.focus",
+      "description": "Focus Steam",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "id": "cursor",
+  "version": "1.0.0",
+  "name": "Cursor",
+  "description": "Cursor IDE plugin",
+  "docs": "README.md",
+  "author": "NEURON",
+  "permissions": {
+    "risk_ceiling": "confirm",
+    "control_methods": [
+      "api",
+      "uia"
+    ],
+    "planner_visible": true,
+    "allow_shell": false
+  },
+  "config": {
+    "schema": {},
+    "defaults": {
+      "app": "Cursor"
+    }
+  },
+  "dependencies": {
+    "neuron": ">=4.0",
+    "tools": [
+      "open_app"
+    ],
+    "python": [],
+    "plugins": []
+  },
+  "intents": [
+    {
+      "id": "cursor.open",
+      "aliases": [
+        "open cursor"
+      ],
+      "prefer": [
+        "cursor.open"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "name": "cursor.open",
+      "description": "Open Cursor IDE",
+      "handler": "actions:open",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    },
+    {
+      "name": "cursor.focus",
+      "description": "Focus Cursor",
+      "handler": "actions:focus",
+      "args_schema": {},
+      "risk": "safe",
+      "control_methods": [
+        "api"
+      ]
+    }
+  ]
+}
