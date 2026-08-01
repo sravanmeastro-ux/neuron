@@ -142,6 +142,7 @@
     "workflow_recording": true,
     "personality_engine": true,
     "neuron_os": true,
+    "developer_mode": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,

@@ -381,6 +381,38 @@ def run(
     except Exception as exc:
         _log(f"neuron_os skipped: {exc}")
 
+    # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
+    try:
+        from neuron.developer import maybe_handle_developer
+        dev = maybe_handle_developer(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if dev is not None:
+            say, acted, dmeta = dev
+            meta.update({k: v for k, v in (dmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (dmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("developer", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((dmeta or {}).get("path") or "developer"),
+            )
+    except Exception as exc:
+        _log(f"developer mode skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.

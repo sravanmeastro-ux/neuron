@@ -366,6 +366,57 @@ def ensure_bootstrapped() -> None:
     _bootstrap_workflows()
     _bootstrap_personality()
     _bootstrap_neuron_os()
+    _bootstrap_developer()
+
+
+def _bootstrap_developer() -> None:
+    try:
+        from neuron.developer import (
+            tool_developer_index,
+            tool_developer_review,
+            tool_developer_run,
+            tool_developer_status,
+        )
+        register(
+            "developer_status",
+            tool_developer_status,
+            description="Developer Mode status + project index summary",
+            args_schema={"root": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "developer_run",
+            tool_developer_run,
+            description="Developer Mode: analyze, index, deps, git review, tests, diagnostics, refactor, scaffold",
+            args_schema={"request": "str", "capability": "str", "confirmed": "bool", "root": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "filesystem"],
+        )
+        register(
+            "developer_index",
+            tool_developer_index,
+            description="Index the current repository (languages, frameworks, manifests)",
+            args_schema={"root": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "developer_review",
+            tool_developer_review,
+            description="Review the latest git commit",
+            args_schema={"root": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        print("[tools] developer mode tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] developer bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_neuron_os() -> None:
