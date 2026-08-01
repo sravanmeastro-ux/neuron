@@ -363,6 +363,57 @@ def ensure_bootstrapped() -> None:
     _bootstrap_procedures()
     _bootstrap_v35_primitives()
     _bootstrap_plugins()
+    _bootstrap_workflows()
+
+
+def _bootstrap_workflows() -> None:
+    """Workflow Recording — record / replay / edit with vars, loops, conditions."""
+    try:
+        from neuron.workflows import (
+            tool_workflow_edit,
+            tool_workflow_list,
+            tool_workflow_record,
+            tool_workflow_run,
+        )
+        register(
+            "workflow_record",
+            tool_workflow_record,
+            description="Start/stop/cancel workflow recording (mouse, keyboard, apps, clipboard, browser, timing, focus)",
+            args_schema={"action": "str", "name": "str", "channels": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "workflow_list",
+            tool_workflow_list,
+            description="List saved workflows",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "workflow_run",
+            tool_workflow_run,
+            description="Replay a saved workflow (supports variables, dry_run)",
+            args_schema={"id": "str", "variables": "dict", "dry_run": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "workflow_edit",
+            tool_workflow_edit,
+            description="Create/edit workflows: steps, variables, loops, conditions",
+            args_schema={"action": "str", "id": "str", "step": "dict", "index": "int"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        print("[tools] workflow recording tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] workflows bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_plugins() -> None:

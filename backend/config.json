@@ -132,6 +132,7 @@
     "learning_engine": true,
     "long_term_memory": true,
     "plugin_sdk": true,
+    "workflow_recording": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -148,5 +149,22 @@
     "enabled": true,
     "paths": [],
     "_comment": "Builtin plugins live under neuron/plugins/builtin. Extra dirs listed in paths must each contain plugin.json packages."
+  },
+  "workflows": {
+    "enabled": true,
+    "max_steps": 80,
+    "poll_seconds": 0.05,
+    "idle_wait_ms": 800,
+    "store": "",
+    "channels": [
+      "mouse",
+      "keyboard",
+      "applications",
+      "clipboard",
+      "browser",
+      "timing",
+      "window_focus"
+    ],
+    "_comment": "Workflow Recording: multi-channel capture + replay with variables, loops, conditions. Empty store = backend/data/workflows.json."
   }
 }
