@@ -1,4 +1,4 @@
-"""Speech-to-text for N.E.U.R.O.N — free local Whisper (prefer faster-whisper).
+"""Speech-to-text for N.E.U.R.O.N — local faster-whisper only.
 
 Frontend (or native mic) streams 16 kHz mono Int16/float PCM; energy VAD cuts
 utterances. Partial transcription is available for live captions — execution
@@ -82,21 +82,28 @@ def _clean_transcript(text: str) -> str:
 
 
 def _normalize_model_name(name: str) -> str:
-    n = (name or "turbo").strip().lower()
+    n = (name or "small").strip().lower()
     aliases = {
-        "whisper-1": "turbo",
-        "openai": "turbo",
-        "large-v3-turbo": "turbo",
-        "large_v3_turbo": "turbo",
+        "whisper-1": "small",
+        "openai": "small",
+        "turbo": "large-v3-turbo",
+        "large-v3-turbo": "large-v3-turbo",
+        "large_v3_turbo": "large-v3-turbo",
+        "large": "large-v3",
+        "large-v3": "large-v3",
+        "large-v2": "large-v2",
+        "medium": "medium",
+        "small": "small",
+        "base": "base",
+        "tiny": "tiny",
     }
     return aliases.get(n, n)
 
 
 class WhisperEngine:
-    """Local Whisper — prefers faster-whisper (Phase 6), falls back to openai-whisper."""
+    """Local STT via faster-whisper (CTranslate2) — not openai-whisper."""
 
     def __init__(self):
-        self._model = None
         self._fw_model = None
         self._lock = threading.Lock()
         self._cfg = _load_stt_cfg()
@@ -104,6 +111,7 @@ class WhisperEngine:
         self._err = None
         self._backend = None
         self._device = "cpu"
+        self._model_name = "small"
 
     def is_enabled(self) -> bool:
         return bool(self._cfg.get("enabled", True))
@@ -116,29 +124,20 @@ class WhisperEngine:
         if not self._ready:
             return (
                 "Speech recognition isn't ready yet. "
-                f"{self._err or 'Still loading Whisper.'}"
+                f"{self._err or 'Still loading faster-whisper.'}"
             )
-        model = _normalize_model_name(self._cfg.get("model", "turbo"))
-        if self._backend == "faster-whisper":
-            return (
-                f"I'm using free OpenAI Whisper weights via faster-whisper, "
-                f"model {model}, on {self._device}. Not Windows Speech Recognition."
-            )
-        if self._backend == "openai-whisper":
-            return (
-                f"I'm using free self-hosted OpenAI Whisper, model {model}, "
-                f"running locally on {self._device}."
-            )
-        return f"Speech engine: {self._backend} on {self._device}."
+        return (
+            f"I'm using faster-whisper, model {self._model_name}, "
+            f"on {self._device}. Not OpenAI Whisper Python and not Windows Speech."
+        )
 
     def warmup(self) -> str:
         self._ensure_model()
         if not self._ready:
-            raise RuntimeError(self._err or "Whisper failed to load")
+            raise RuntimeError(self._err or "faster-whisper failed to load")
         silence = np.zeros(SAMPLE_RATE // 4, dtype=np.float32)
         _ = self.transcribe(silence)
-        model = _normalize_model_name(self._cfg.get("model", "turbo"))
-        return f"Whisper ready ({self._backend} {model} on {self._device})."
+        return f"Whisper ready ({self._backend} {self._model_name} on {self._device})."
 
     def _ensure_model(self):
         if self._ready:
@@ -148,62 +147,10 @@ class WhisperEngine:
                 return
             self._cfg = _load_stt_cfg()
             want = (self._cfg.get("device") or "cuda").lower()
-            provider = (self._cfg.get("provider") or "faster-whisper").lower()
-
-            prefer_fw = provider in (
-                "faster-whisper", "faster_whisper", "fw", "ctranslate2", "",
-            )
-            prefer_ow = provider in (
-                "openai-whisper", "openai_whisper", "whisper", "openai",
-            )
-
-            if prefer_fw:
-                if self._try_faster_whisper(want):
-                    return
-                print("[stt] faster-whisper failed — trying openai-whisper", flush=True)
-                if self._try_openai_whisper(want):
-                    return
-            else:
-                if prefer_ow and self._try_openai_whisper(want):
-                    return
-                print("[stt] openai-whisper unavailable — trying faster-whisper", flush=True)
-                if self._try_faster_whisper(want):
-                    return
-                if not prefer_ow and self._try_openai_whisper(want):
-                    return
-
+            if self._try_faster_whisper(want):
+                return
             self._ready = False
-            self._err = self._err or "Could not load local Whisper"
-
-    def _try_openai_whisper(self, want_device: str) -> bool:
-        try:
-            import torch
-            import whisper
-        except Exception as exc:
-            self._err = f"openai-whisper import failed: {exc}"
-            print(f"[stt] {self._err}", flush=True)
-            return False
-
-        model_name = _normalize_model_name(self._cfg.get("model", "turbo"))
-        if want_device.startswith("cuda") and not torch.cuda.is_available():
-            print("[stt] PyTorch has no CUDA — openai-whisper on CPU", flush=True)
-            device = "cpu"
-        else:
-            device = "cuda" if want_device.startswith("cuda") and torch.cuda.is_available() else "cpu"
-        try:
-            print(f"[stt] loading openai/whisper '{model_name}' on {device}…", flush=True)
-            self._model = whisper.load_model(model_name, device=device)
-            self._device = device
-            self._backend = "openai-whisper"
-            self._ready = True
-            self._err = None
-            print(f"[stt] openai-whisper ready ({model_name} / {device})", flush=True)
-            return True
-        except Exception as exc:
-            self._err = str(exc)
-            print(f"[stt] openai-whisper load failed: {exc}", flush=True)
-            self._model = None
-            return False
+            self._err = self._err or "Could not load faster-whisper"
 
     def _try_faster_whisper(self, want_device: str) -> bool:
         try:
@@ -214,41 +161,56 @@ class WhisperEngine:
             print(f"[stt] {self._err}", flush=True)
             return False
 
-        raw = _normalize_model_name(self._cfg.get("model", "turbo"))
-        fw_map = {
-            "turbo": "large-v3-turbo",
-            "large": "large-v3",
-            "large-v3": "large-v3",
-            "large-v2": "large-v2",
-            "medium": "medium",
-            "small": "small",
-            "base": "base",
-            "tiny": "tiny",
-        }
-        model_name = fw_map.get(raw, raw)
+        model_name = _normalize_model_name(self._cfg.get("model", "small"))
         device = "cuda" if want_device.startswith("cuda") else "cpu"
-        compute = self._cfg.get("compute_type", "float16" if device == "cuda" else "int8")
+        compute = self._cfg.get(
+            "compute_type",
+            "float16" if device == "cuda" else "int8",
+        )
         try:
-            self._fw_model = WhisperModel(model_name, device=device, compute_type=compute)
+            print(
+                f"[stt] loading faster-whisper '{model_name}' "
+                f"device={device} compute_type={compute}…",
+                flush=True,
+            )
+            self._fw_model = WhisperModel(
+                model_name,
+                device=device,
+                compute_type=compute,
+            )
             list(self._fw_model.transcribe(
                 np.zeros(SAMPLE_RATE // 8, dtype=np.float32),
-                language="en", vad_filter=False,
+                language="en",
+                vad_filter=False,
             ))
         except Exception as cuda_exc:
-            print(f"[stt] faster-whisper {device} failed ({cuda_exc}); trying CPU", flush=True)
+            print(
+                f"[stt] faster-whisper {device}/{compute} failed ({cuda_exc}); "
+                f"trying CPU int8",
+                flush=True,
+            )
             try:
-                self._fw_model = WhisperModel(model_name, device="cpu", compute_type="int8")
+                self._fw_model = WhisperModel(
+                    model_name,
+                    device="cpu",
+                    compute_type="int8",
+                )
                 device = "cpu"
+                compute = "int8"
             except Exception as exc:
                 self._err = str(exc)
                 print(f"[stt] faster-whisper load failed: {exc}", flush=True)
                 return False
 
+        self._model_name = model_name
         self._device = device
         self._backend = "faster-whisper"
         self._ready = True
         self._err = None
-        print(f"[stt] faster-whisper ready ({model_name} / {device})", flush=True)
+        print(
+            f"[stt] faster-whisper ready ({model_name} / {device} / {compute})",
+            flush=True,
+        )
         return True
 
     def _prep_audio(self, audio: np.ndarray) -> np.ndarray | None:
@@ -269,10 +231,21 @@ class WhisperEngine:
         if not self._ready or audio is None:
             return ""
         with self._lock:
-            if self._backend == "openai-whisper":
-                text = self._transcribe_openai_whisper(audio)
-            else:
-                text = self._transcribe_faster(audio, vad=True)
+            text = self._transcribe_faster(audio, vad=True)
+        return _clean_transcript(text)
+
+    def try_transcribe_partial(self, audio: np.ndarray) -> str:
+        """Non-blocking partial — returns '' if the model lock is held by a final."""
+        self._ensure_model()
+        audio = self._prep_audio(audio)
+        if not self._ready or audio is None:
+            return ""
+        if not self._lock.acquire(blocking=False):
+            return ""
+        try:
+            text = self._transcribe_faster(audio, vad=False, beam=1)
+        finally:
+            self._lock.release()
         return _clean_transcript(text)
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
@@ -282,28 +255,16 @@ class WhisperEngine:
         if not self._ready or audio is None:
             return ""
         with self._lock:
-            if self._backend == "faster-whisper":
-                text = self._transcribe_faster(audio, vad=False, beam=1)
-            elif self._backend == "openai-whisper":
-                text = self._transcribe_openai_whisper(audio)
-            else:
-                return ""
+            text = self._transcribe_faster(audio, vad=False, beam=1)
         return _clean_transcript(text)
 
-    def _transcribe_openai_whisper(self, audio: np.ndarray) -> str:
-        lang = self._cfg.get("language") or "en"
-        fp16 = self._device == "cuda"
-        result = self._model.transcribe(
-            audio,
-            language=None if lang == "auto" else lang,
-            fp16=fp16,
-            temperature=0.0,
-            condition_on_previous_text=False,
-            without_timestamps=True,
-        )
-        return (result.get("text") or "").strip()
-
-    def _transcribe_faster(self, audio: np.ndarray, *, vad: bool = True, beam: int | None = None) -> str:
+    def _transcribe_faster(
+        self,
+        audio: np.ndarray,
+        *,
+        vad: bool = True,
+        beam: int | None = None,
+    ) -> str:
         beam = int(beam if beam is not None else self._cfg.get("beam_size", 1))
         segments, _info = self._fw_model.transcribe(
             audio,

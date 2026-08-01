@@ -1,16 +1,37 @@
-"""Local OCR — RapidOCR with region detection (Phase 5)."""
+"""Local OCR — RapidOCR with region detection (Phase 5).
+
+Process-wide singleton engine (thread-safe) — never re-init ONNX per call.
+"""
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
 from neuron.windows.result import ToolResult, fail, ok
 
+_ENGINE = None
+_ENGINE_LOCK = threading.Lock()
+_ENGINE_ERR: str | None = None
+
 
 def _engine():
-    from rapidocr_onnxruntime import RapidOCR
-    return RapidOCR()
+    """Return a cached RapidOCR instance (load once)."""
+    global _ENGINE, _ENGINE_ERR
+    if _ENGINE is not None:
+        return _ENGINE
+    with _ENGINE_LOCK:
+        if _ENGINE is not None:
+            return _ENGINE
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _ENGINE = RapidOCR()
+            _ENGINE_ERR = None
+            return _ENGINE
+        except Exception as exc:
+            _ENGINE_ERR = str(exc)
+            raise
 
 
 def ocr_image(args: dict | None = None) -> ToolResult:
@@ -109,7 +130,8 @@ def detect_text_regions(args: dict | None = None) -> ToolResult:
             method="rapidocr",
         )
     except Exception as exc:
-        return fail(f"OCR engine unavailable: {exc}", method="rapidocr")
+        err = _ENGINE_ERR or str(exc)
+        return fail(f"OCR engine unavailable: {err}", method="rapidocr")
 
 
 def read_screen(monitor=None) -> str:

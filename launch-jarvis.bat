@@ -13,11 +13,10 @@ if errorlevel 1 (
 )
 
 rem Install backend dependencies on first run.
-python -c "import fastapi, uvicorn, pyautogui, psutil, openai, uiautomation, playwright, whisper, faster_whisper, numpy" >nul 2>nul
+python -c "import fastapi, uvicorn, pyautogui, psutil, openai, uiautomation, playwright, faster_whisper, numpy" >nul 2>nul
 if errorlevel 1 (
   echo Installing NEURON brain dependencies, one-time setup...
   python -m pip install -r requirements.txt
-  python -m pip install "git+https://github.com/openai/whisper.git"
 )
 
 rem Make sure the local AI (Ollama) is running for the reasoning brain.

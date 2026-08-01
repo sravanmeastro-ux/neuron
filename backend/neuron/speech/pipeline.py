@@ -37,10 +37,17 @@ class VoicePipeline:
         self.engine = stt.get_engine()
         self.session = session or get_session()
         self._last_partial_at = 0.0
-        self._partial_interval = float(self._cfg().get("partial_interval_seconds", 0.85) or 0.85)
+        self._partial_interval = float(self._cfg().get("partial_interval_seconds", 1.2) or 1.2)
+        self._partials_enabled = bool(self._cfg().get("partials_enabled", True))
+        self._busy = False
         self._oww_buf = np.zeros(0, dtype=np.float32)
         self._base_speech_rms = float(getattr(self.assembler, "speech_rms", 0.012) or 0.012)
         self._media_loud = False
+        self._speech_started_at = 0.0
+
+    def set_busy(self, busy: bool) -> None:
+        """When True, skip partial ASR so finals get the Whisper lock immediately."""
+        self._busy = bool(busy)
 
     def _cfg(self) -> dict:
         try:
@@ -90,17 +97,30 @@ class VoicePipeline:
                 events.append(VoiceEvent(kind="wake", text="Neuron", meta={"source": "openwakeword"}))
                 self._oww_buf = np.zeros(0, dtype=np.float32)
 
+        was_in_speech = bool(self.assembler._in_speech)
         clip = self.assembler.push(pcm_f32)
+        if self.assembler._in_speech and not was_in_speech:
+            self._speech_started_at = time.perf_counter()
 
-        # Chunked / partial transcription while speaking (do NOT execute)
-        if self.assembler._in_speech and self.engine.is_enabled():
+        # Chunked / partial transcription while speaking (do NOT execute).
+        # Skip while busy (command running) or when disabled — frees GPU for finals.
+        if (
+            self._partials_enabled
+            and not self._busy
+            and self.assembler._in_speech
+            and self.engine.is_enabled()
+        ):
             now = time.time()
             if now - self._last_partial_at >= self._partial_interval:
                 self._last_partial_at = now
                 buf = self.assembler._buf
                 if buf is not None and len(buf) >= SAMPLE_RATE * 0.6:
                     try:
-                        partial = self.engine.transcribe_partial(buf.copy())
+                        # Prefer try_lock so partial never blocks a pending final
+                        if hasattr(self.engine, "try_transcribe_partial"):
+                            partial = self.engine.try_transcribe_partial(buf.copy())
+                        else:
+                            partial = self.engine.transcribe_partial(buf.copy())
                         if partial and partial != self.session.last_partial:
                             self.session.last_partial = partial
                             events.append(VoiceEvent(kind="partial", text=partial))
@@ -111,10 +131,24 @@ class VoicePipeline:
             return events
 
         # Final utterance — full transcription + completeness gate
-        text = self.engine.transcribe(clip) if self.engine.is_enabled() else ""
+        vad_ms = 0.0
+        if self._speech_started_at:
+            vad_ms = (time.perf_counter() - self._speech_started_at) * 1000.0
+        stt_ms = 0.0
+        text = ""
+        if self.engine.is_enabled():
+            t_stt = time.perf_counter()
+            text = self.engine.transcribe(clip)
+            stt_ms = (time.perf_counter() - t_stt) * 1000.0
         gate = is_complete_command(text)
         if not gate.accept:
-            events.append(VoiceEvent(kind="rejected", text=gate.text, meta={"reason": gate.reason}))
+            events.append(
+                VoiceEvent(
+                    kind="rejected",
+                    text=gate.text,
+                    meta={"reason": gate.reason, "vad_ms": round(vad_ms, 2), "stt_ms": round(stt_ms, 2)},
+                )
+            )
             return events
 
         # Speaker-bleed filter while YouTube / media is loud
@@ -179,7 +213,12 @@ class VoicePipeline:
             VoiceEvent(
                 kind="final",
                 text=final_text,
-                meta={"raw": gate.text, "media_loud": media_loud},
+                meta={
+                    "raw": gate.text,
+                    "media_loud": media_loud,
+                    "vad_ms": round(vad_ms, 2),
+                    "stt_ms": round(stt_ms, 2),
+                },
             )
         )
         return events

@@ -1,15 +1,44 @@
-"""Live Windows state: processes, windows, foreground, monitors."""
+"""Live Windows state: processes, windows, foreground, monitors.
+
+Short TTL caches cut repeated UIA/psutil cost on open/verify hot paths.
+"""
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
 from neuron.windows.resolve import ResolvedApp, matches_process, matches_window_title
 
+_CACHE_TTL_S = 0.35
+_cache_lock = threading.Lock()
+_cache: dict[str, Any] = {
+    "windows": None,
+    "windows_at": 0.0,
+    "processes": None,
+    "processes_at": 0.0,
+    "monitors": None,
+    "monitors_at": 0.0,
+}
+
 
 def _log(msg: str) -> None:
-    print(f"[win-state] {msg}", flush=True)
+    try:
+        from neuron.perf import log
+        log("win-state", msg, level="DEBUG")
+    except Exception:
+        print(f"[win-state] {msg}", flush=True)
+
+
+def invalidate_cache() -> None:
+    with _cache_lock:
+        _cache["windows"] = None
+        _cache["processes"] = None
+        _cache["monitors"] = None
+        _cache["windows_at"] = 0.0
+        _cache["processes_at"] = 0.0
+        _cache["monitors_at"] = 0.0
 
 
 def get_foreground() -> dict[str, Any]:
@@ -35,7 +64,7 @@ def get_foreground() -> dict[str, Any]:
         return {}
 
 
-def list_top_windows(limit: int = 40) -> list[dict[str, Any]]:
+def _list_top_windows_uncached(limit: int = 40) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
         from neuron.windows.com import com_uia
@@ -68,7 +97,6 @@ def list_top_windows(limit: int = 40) -> list[dict[str, Any]]:
             return rows
     except Exception as exc:
         _log(f"list_top_windows UIA failed: {exc}")
-        # pywinauto fallback
         try:
             from pywinauto import Desktop
             for w in Desktop(backend="uia").windows():
@@ -76,7 +104,14 @@ def list_top_windows(limit: int = 40) -> list[dict[str, Any]]:
                     title = (w.window_text() or "").strip()
                     if not title:
                         continue
-                    rows.append({"title": title[:120], "hwnd": int(w.handle), "left": 0, "top": 0, "width": 0, "height": 0})
+                    rows.append({
+                        "title": title[:120],
+                        "hwnd": int(w.handle),
+                        "left": 0,
+                        "top": 0,
+                        "width": 0,
+                        "height": 0,
+                    })
                     if len(rows) >= limit:
                         break
                 except Exception:
@@ -86,7 +121,24 @@ def list_top_windows(limit: int = 40) -> list[dict[str, Any]]:
     return rows
 
 
-def list_running_processes(limit: int = 80) -> list[str]:
+def list_top_windows(limit: int = 40, *, fresh: bool = False) -> list[dict[str, Any]]:
+    now = time.time()
+    with _cache_lock:
+        hit = _cache["windows"]
+        if (
+            not fresh
+            and hit is not None
+            and (now - float(_cache["windows_at"])) < _CACHE_TTL_S
+        ):
+            return list(hit)[:limit]
+    rows = _list_top_windows_uncached(max(limit, 50))
+    with _cache_lock:
+        _cache["windows"] = rows
+        _cache["windows_at"] = now
+    return list(rows)[:limit]
+
+
+def _list_running_processes_uncached(limit: int = 80) -> list[str]:
     try:
         import psutil
         names = sorted({
@@ -100,7 +152,24 @@ def list_running_processes(limit: int = 80) -> list[str]:
         return []
 
 
-def list_monitors() -> list[dict[str, Any]]:
+def list_running_processes(limit: int = 80, *, fresh: bool = False) -> list[str]:
+    now = time.time()
+    with _cache_lock:
+        hit = _cache["processes"]
+        if (
+            not fresh
+            and hit is not None
+            and (now - float(_cache["processes_at"])) < _CACHE_TTL_S
+        ):
+            return list(hit)[:limit]
+    rows = _list_running_processes_uncached(max(limit, 120))
+    with _cache_lock:
+        _cache["processes"] = rows
+        _cache["processes_at"] = now
+    return list(rows)[:limit]
+
+
+def _list_monitors_uncached() -> list[dict[str, Any]]:
     try:
         from neuron.windows import monitors as mon_mod
         mons = mon_mod.list_monitor_dicts()
@@ -145,7 +214,26 @@ def list_monitors() -> list[dict[str, Any]]:
         return []
 
 
-def snapshot(request: str = "") -> dict[str, Any]:
+def list_monitors(*, fresh: bool = False) -> list[dict[str, Any]]:
+    now = time.time()
+    with _cache_lock:
+        hit = _cache["monitors"]
+        if (
+            not fresh
+            and hit is not None
+            and (now - float(_cache["monitors_at"])) < 2.0
+        ):
+            return list(hit)
+    rows = _list_monitors_uncached()
+    with _cache_lock:
+        _cache["monitors"] = rows
+        _cache["monitors_at"] = now
+    return list(rows)
+
+
+def snapshot(request: str = "", *, fresh: bool = False) -> dict[str, Any]:
+    if fresh:
+        invalidate_cache()
     fg = get_foreground()
     return {
         "foreground": fg,
@@ -158,7 +246,10 @@ def snapshot(request: str = "") -> dict[str, Any]:
 
 
 def find_app_windows(resolved: ResolvedApp) -> list[dict[str, Any]]:
-    return [w for w in list_top_windows(50) if matches_window_title(resolved, w.get("title") or "")]
+    return [
+        w for w in list_top_windows(50)
+        if matches_window_title(resolved, w.get("title") or "")
+    ]
 
 
 def app_is_running(resolved: ResolvedApp) -> bool:
@@ -195,16 +286,17 @@ def focus_hwnd(hwnd: int) -> bool:
         SW_RESTORE = 9
         user32.ShowWindow(hwnd, SW_RESTORE)
         user32.SetForegroundWindow(hwnd)
+        invalidate_cache()
         return True
     except Exception as exc:
         _log(f"focus_hwnd win32 failed: {exc}")
-    # UIA fallback
     try:
         import uiautomation as auto
         for w in auto.GetRootControl().GetChildren():
             try:
                 if int(getattr(w, "NativeWindowHandle", 0) or 0) == hwnd:
                     w.SetActive()
+                    invalidate_cache()
                     return True
             except Exception:
                 continue
@@ -215,9 +307,13 @@ def focus_hwnd(hwnd: int) -> bool:
 
 def wait_for_app_window(resolved: ResolvedApp, timeout: float = 12.0) -> dict[str, Any] | None:
     deadline = time.time() + timeout
+    first = True
     while time.time() < deadline:
+        if not first:
+            invalidate_cache()
         wins = find_app_windows(resolved)
         if wins:
             return wins[0]
-        time.sleep(0.35)
+        first = False
+        time.sleep(0.15 if timeout <= 3.0 else 0.35)
     return None

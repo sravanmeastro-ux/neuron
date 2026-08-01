@@ -900,8 +900,11 @@ def _focus_window_by_title(name: str) -> bool:
 
 
 def volume(action: str) -> str:
-    key = {"up": "volumeup", "down": "volumedown", "mute": "volumemute"}[action]
-    for _ in range(5 if action != "mute" else 1):
+    act = (action or "up").strip().lower()
+    if act == "unmute":
+        act = "mute"  # same media key toggles mute state
+    key = {"up": "volumeup", "down": "volumedown", "mute": "volumemute"}[act]
+    for _ in range(5 if act != "mute" else 1):
         pyautogui.press(key)
     return f"Volume {action}."
 

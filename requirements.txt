@@ -5,7 +5,6 @@ psutil
 openai
 uiautomation
 playwright
-openai-whisper
 faster-whisper
 numpy
 nvidia-cublas-cu12

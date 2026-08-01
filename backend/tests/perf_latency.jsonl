@@ -1,0 +1,8 @@
+{"label": "volume up", "total_ms": 220.04, "phases": {"brain_ms": 220.01}, "meta": {"path": "fast_volume_media", "reply": "Volume up.", "acted": true}}
+{"label": "volume down", "total_ms": 208.6, "phases": {"brain_ms": 208.57}, "meta": {"path": "fast_volume_media", "reply": "Volume down.", "acted": true}}
+{"label": "mute", "total_ms": 42.21, "phases": {"brain_ms": 42.19}, "meta": {"path": "fast_volume_media", "reply": "Volume mute.", "acted": true}}
+{"label": "volume up", "total_ms": 218.57, "phases": {"brain_ms": 218.54}, "meta": {"path": "fast_volume_media", "reply": "Volume up.", "acted": true}}
+{"label": "volume down", "total_ms": 208.23, "phases": {"brain_ms": 208.2}, "meta": {"path": "fast_volume_media", "reply": "Volume down.", "acted": true}}
+{"label": "mute", "total_ms": 41.74, "phases": {"brain_ms": 41.72}, "meta": {"path": "fast_volume_media", "reply": "Volume mute.", "acted": true}}
+{"label": "open notepad", "total_ms": 7448.46, "phases": {"glance_ms": 0.0, "act_verify_ms": 4954.37, "brain_ms": 7448.45}, "meta": {"glance_skipped": true, "path": "capability", "capability": "windows.open_app", "reply": "Opened notepad.", "acted": true}}
+{"label": "open chrome", "total_ms": 1483.12, "phases": {"glance_ms": 0.0, "act_verify_ms": 1474.37, "brain_ms": 1483.11}, "meta": {"glance_skipped": true, "path": "capability", "capability": "windows.open_app", "reply": "chrome was already open - focused it.", "acted": true}}

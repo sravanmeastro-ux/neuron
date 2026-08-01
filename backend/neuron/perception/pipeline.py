@@ -81,6 +81,29 @@ def _uia_elements(limit: int = 40) -> list[dict[str, Any]]:
         return []
 
 
+_VLM_CLIENT = None
+_VLM_CLIENT_KEY = None
+
+
+def _vlm_client(llm: dict):
+    """Reuse one OpenAI-compatible client for local VLM calls."""
+    global _VLM_CLIENT, _VLM_CLIENT_KEY
+    base = str(llm.get("base_url") or "")
+    key = str(llm.get("api_key") or "ollama")
+    cache_key = (base, key)
+    if _VLM_CLIENT is not None and _VLM_CLIENT_KEY == cache_key:
+        return _VLM_CLIENT
+    from openai import OpenAI
+    _VLM_CLIENT = OpenAI(
+        base_url=base,
+        api_key=key,
+        timeout=60.0,
+        max_retries=0,
+    )
+    _VLM_CLIENT_KEY = cache_key
+    return _VLM_CLIENT
+
+
 def _local_vlm(image, request: str = "") -> str:
     """Call local Ollama vision model only — never paid cloud."""
     vcfg = _vision_cfg()
@@ -107,8 +130,7 @@ def _local_vlm(image, request: str = "") -> str:
         )
         llm = cfg.get("llm") or {}
         model = (vcfg.get("model") or "qwen2.5vl:7b").strip()
-        from openai import OpenAI
-        client = OpenAI(base_url=llm.get("base_url"), api_key=llm.get("api_key") or "ollama", timeout=60.0, max_retries=0)
+        client = _vlm_client(llm)
         prompt = (request or "Describe what is visible on screen. Be concise.").strip()
         resp = client.chat.completions.create(
             model=model,

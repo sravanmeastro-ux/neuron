@@ -103,7 +103,8 @@ def open_app(args: dict | None = None) -> ToolResult:
     args = args or {}
     name = _name(args)
     auto_learn = bool(args.get("auto_learn", True))
-    wait_s = float(args.get("wait_seconds") or 12)
+    # Default shorter wait; callers can raise for cold starts
+    wait_s = float(args.get("wait_seconds") if args.get("wait_seconds") is not None else 4)
     if not name:
         return fail("Need an app name.")
 
@@ -122,12 +123,16 @@ def open_app(args: dict | None = None) -> ToolResult:
     before = win_state.snapshot(name)
     _log(f"open {resolved.canonical!r} launch={resolved.launch_target!r}")
 
-    # Already running → focus + verify
+    # Already running → focus + verify (no long wait)
     if win_state.app_is_running(resolved):
         fr = focus_app({"name": resolved.canonical})
         if fr.success:
             fr.message = f"{resolved.canonical} was already open - focused it."
             fr.state["launched"] = False
+            try:
+                win_state.invalidate_cache()
+            except Exception:
+                pass
             return fr
 
     method = ""
@@ -160,9 +165,14 @@ def open_app(args: dict | None = None) -> ToolResult:
     except Exception as exc:
         return fail(str(exc), state={"before": before, "resolved": resolved.canonical}, method=method)
 
-    # Wait + verify window
+    try:
+        win_state.invalidate_cache()
+    except Exception:
+        pass
+
+    # Wait + verify window (short default; process-running soft success below)
     win = win_state.wait_for_app_window(resolved, timeout=wait_s)
-    after = win_state.snapshot(name)
+    after = win_state.snapshot(name, fresh=True)
     if win:
         hwnd = int(win.get("hwnd") or 0)
         if hwnd:
@@ -195,8 +205,8 @@ def open_app(args: dict | None = None) -> ToolResult:
         )
 
     return fail(
-        f"Launched {resolved.canonical} but couldn't verify a window within {wait_s:.0f}s.",
-        state={"before": before, "after": after, "resolved": resolved.canonical, "verified": False},
+        f"Tried to open {resolved.canonical}, but no window appeared.",
+        state={"before": before, "after": after, "resolved": resolved.canonical},
         method=method,
     )
 
