@@ -1,0 +1,123 @@
+{
+  "fast": {
+    "samples": [
+      {
+        "utt": "volume up",
+        "path": "fast_router",
+        "ms": 290.07,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.97,
+        "band": "immediate",
+        "capability": "system.volume",
+        "say": "Volume up."
+      },
+      {
+        "utt": "volume down",
+        "path": "fast_router",
+        "ms": 292.4,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.97,
+        "band": "immediate",
+        "capability": "system.volume",
+        "say": "Volume down."
+      },
+      {
+        "utt": "mute",
+        "path": "fast_router",
+        "ms": 124.97,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.95,
+        "band": "immediate",
+        "capability": "system.volume",
+        "say": "Volume mute."
+      },
+      {
+        "utt": "undo",
+        "path": "fast_router",
+        "ms": 40.63,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.97,
+        "band": "immediate",
+        "capability": "fast.press_keys",
+        "say": "Pressed ctrl+z."
+      },
+      {
+        "utt": "copy",
+        "path": "fast_router",
+        "ms": 125.12,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.9,
+        "band": "light",
+        "capability": "input.copy",
+        "say": "Pressed ctrl+c."
+      },
+      {
+        "utt": "paste",
+        "path": "fast_router",
+        "ms": 128.1,
+        "ok": true,
+        "used_agent_loop": false,
+        "category": "A",
+        "confidence": 0.9,
+        "band": "light",
+        "capability": "input.paste",
+        "say": "Pressed ctrl+v."
+      }
+    ],
+    "stats": {
+      "n": 6,
+      "mean_ms": 166.88,
+      "median_ms": 126.61,
+      "p95_ms": 292.4,
+      "worst_ms": 292.4,
+      "best_ms": 40.63
+    }
+  },
+  "agent_loop": null,
+  "brain_handle": {
+    "samples": [
+      {
+        "utt": "volume up",
+        "ms": 330.81,
+        "acted": true,
+        "say": "Volume up."
+      },
+      {
+        "utt": "volume down",
+        "ms": 310.91,
+        "acted": true,
+        "say": "Volume down."
+      },
+      {
+        "utt": "mute",
+        "ms": 153.07,
+        "acted": true,
+        "say": "Volume mute."
+      }
+    ],
+    "stats": {
+      "n": 3,
+      "mean_ms": 264.93,
+      "median_ms": 310.91,
+      "p95_ms": 330.81,
+      "worst_ms": 330.81,
+      "best_ms": 153.07
+    }
+  },
+  "assertions_failed": [],
+  "pass": true,
+  "architecture": {
+    "old": "Speech \u2192 CapabilityRouter \u2192 AgentLoop(observe/act/verify) \u2192 Desktop",
+    "new": "Speech \u2192 FastIntentRouter \u2192 Desktop (AgentLoop only on Category B or fallback)"
+  }
+}
