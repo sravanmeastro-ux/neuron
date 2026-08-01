@@ -1,0 +1,37 @@
+{
+  "detect_accuracy": 1.0,
+  "plan_accuracy": 1.0,
+  "non_workflow_skip_accuracy": 1.0,
+  "dependency_order_ok": true,
+  "confirm_gate_ok": true,
+  "cancel_ok": true,
+  "planner_latency_ms": {
+    "mean": 0.21,
+    "max": 0.38,
+    "min": 0.08,
+    "samples": [
+      0.38,
+      0.15,
+      0.09,
+      0.08,
+      0.36
+    ]
+  },
+  "goal_sample": {
+    "text": "Open Chrome, search YouTube for Unreal Engine tutorials, and play the first result.",
+    "goal_id": "goal_ca831c9b48",
+    "summary": "Open Chrome, search YouTube for Unreal Engine tutorials, and play the first result",
+    "applications": [
+      "Chrome"
+    ],
+    "completion_criteria": [
+      "media or result is playing / opened"
+    ],
+    "destructive": false,
+    "source": "voice",
+    "created_at": 1785586605.5660317
+  },
+  "untouched_fast_semantic_screen_ok": true,
+  "note": "Live success/retry/recovery rates require interactive desktop; measured planner + gates here.",
+  "pass": true
+}
