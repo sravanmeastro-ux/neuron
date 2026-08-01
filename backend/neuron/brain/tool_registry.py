@@ -372,6 +372,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_github_agent()
     _bootstrap_project_intelligence()
     _bootstrap_self_healing()
+    _bootstrap_workflow_intelligence()
+
+
+def _bootstrap_workflow_intelligence() -> None:
+    try:
+        from neuron.workflow_intelligence import tool_workflow_intel_run, tool_workflow_intel_status
+        register(
+            "workflow_intel_status",
+            tool_workflow_intel_status,
+            description="Workflow Intelligence status: presets + learned workflows + recent apps",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "workflow_intel_run",
+            tool_workflow_intel_run,
+            description="Workflow Intelligence: observe apps, learn reusable workflows, run Start coding / game / Blender presets",
+            args_schema={"request": "str", "capability": "str", "preset": "str", "dry_run": "bool", "app": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "applications"],
+        )
+        print("[tools] workflow intelligence tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] workflow_intelligence bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_self_healing() -> None:

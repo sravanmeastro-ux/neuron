@@ -482,6 +482,38 @@ def run(
     except Exception as exc:
         _log(f"self_healing skipped: {exc}")
 
+    # Workflow Intelligence — learn reusable workflows from Cursor/GitHub/Blender/Unreal/VS Code/Browser
+    try:
+        from neuron.workflow_intelligence import maybe_handle_workflow_intelligence
+        wih = maybe_handle_workflow_intelligence(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if wih is not None:
+            say, acted, wimeta = wih
+            meta.update({k: v for k, v in (wimeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (wimeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("workflow_intelligence", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((wimeta or {}).get("path") or "workflow_intelligence"),
+            )
+    except Exception as exc:
+        _log(f"workflow_intelligence skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer

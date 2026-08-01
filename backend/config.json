@@ -148,6 +148,7 @@
     "github_agent": true,
     "project_intelligence": true,
     "self_healing": true,
+    "workflow_intelligence": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -218,5 +219,10 @@
       "deadlock_heartbeat_s": 6.0
     },
     "_comment": "Watchdog logs under backend/data/self_healing/. Soft-restarts registered modules (gc, caches, tool_registry)."
+  },
+  "workflow_intelligence": {
+    "enabled": true,
+    "observe_apps": ["cursor", "github", "blender", "unreal", "vscode", "browser"],
+    "_comment": "Learns reusable workflows from app observation; presets stored via workflows.json with tag workflow_intelligence."
   }
 }
