@@ -1,0 +1,36 @@
+{
+  "project_yesterday_ok": true,
+  "folder_query_ok": true,
+  "remember_forever_ok": true,
+  "pin_ok": true,
+  "maintain": {
+    "summarized": true,
+    "summary_id": "sem_f81de68554",
+    "forgotten": 0,
+    "stats": {
+      "total": 6,
+      "by_kind": {
+        "preference": 1,
+        "semantic": 1,
+        "project": 1,
+        "episodic": 1,
+        "desktop": 2
+      },
+      "pinned": 1
+    }
+  },
+  "prompt_ok": true,
+  "stats": {
+    "total": 7,
+    "by_kind": {
+      "preference": 2,
+      "project": 1,
+      "semantic": 1,
+      "desktop": 2,
+      "episodic": 1
+    },
+    "pinned": 2
+  },
+  "untouched_ok": true,
+  "pass": true
+}

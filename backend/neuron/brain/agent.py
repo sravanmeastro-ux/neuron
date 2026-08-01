@@ -615,6 +615,20 @@ def _finish(
     except Exception:
         pass
     try:
+        if acted:
+            from neuron.memory_engine import observe_utterance as mem_utt
+            req2 = ""
+            try:
+                for entry in tr.to_list():
+                    if (entry.get("role") or entry.get("kind")) in ("user", "User"):
+                        req2 = str(entry.get("text") or entry.get("content") or "")
+                        break
+            except Exception:
+                pass
+            mem_utt(req2 or path, acted=True)
+    except Exception:
+        pass
+    try:
         import memory
         if say:
             memory.log("neuron", say)

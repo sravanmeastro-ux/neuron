@@ -194,6 +194,13 @@ def context_blob(request: str = "") -> str:
     except Exception:
         pass
     try:
+        from neuron.memory_engine import for_prompt as ltm_for_prompt
+        blob = ltm_for_prompt()
+        if blob:
+            lines.append(blob)
+    except Exception:
+        pass
+    try:
         import skills
         if request and any(w in request.lower() for w in (
             "youtube", "steam", "discord", "friends", "scroll", "fullscreen",

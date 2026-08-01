@@ -265,11 +265,21 @@ def execute(
             observe_tool(spec.name, coerced, ok=ok, detail=detail)
         except Exception:
             pass
+        try:
+            from neuron.memory_engine import observe_tool as mem_observe_tool
+            mem_observe_tool(spec.name, coerced, ok=ok)
+        except Exception:
+            pass
         return result
     except Exception as exc:
         try:
             from neuron.learning_engine import observe_tool
             observe_tool(spec.name, coerced, ok=False, detail=str(exc))
+        except Exception:
+            pass
+        try:
+            from neuron.memory_engine import observe_tool as mem_observe_tool
+            mem_observe_tool(spec.name, coerced, ok=False)
         except Exception:
             pass
         raise
@@ -617,6 +627,21 @@ def _bootstrap_new() -> None:
         )
     except Exception as exc:
         print(f"[tools] learning_engine skipped: {exc}", flush=True)
+
+    try:
+        from neuron.memory_engine import tool_memory_status
+        register(
+            "memory_status",
+            tool_memory_status,
+            description="Long-term memory stats: episodic/semantic/project/pinned",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+    except Exception as exc:
+        print(f"[tools] memory_engine skipped: {exc}", flush=True)
 
 
 def _default_methods(name: str) -> list[str]:

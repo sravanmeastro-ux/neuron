@@ -364,6 +364,19 @@ def handle_command(raw: str):
         import voice_mode
         return voice_mode.set_conversation_mode(False), True
 
+    # ---- Long-Term Memory Engine (queries / remember forever) ----------
+    try:
+        from neuron.memory_engine import query_memories
+        mem_reply = query_memories(text)
+        if mem_reply:
+            try:
+                memory.log("neuron", mem_reply)
+            except Exception:
+                pass
+            return mem_reply, True
+    except Exception as exc:
+        print(f"[memory_engine] query skipped: {exc}", flush=True)
+
     # ---- stop / interrupt (TTS + AgentLoop barge-in) -----------------
     try:
         from neuron.speech.interrupt import is_stop_phrase
@@ -464,6 +477,11 @@ def handle_command(raw: str):
             try:
                 from neuron.learning_engine import observe_utterance
                 observe_utterance(text, acted=True)
+            except Exception:
+                pass
+            try:
+                from neuron.memory_engine import observe_utterance as mem_utt
+                mem_utt(text, acted=True)
             except Exception:
                 pass
             return fr.say, True

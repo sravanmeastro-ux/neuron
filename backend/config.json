@@ -130,6 +130,7 @@
     "task_planning_engine": true,
     "computer_use_agent": true,
     "learning_engine": true,
+    "long_term_memory": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
