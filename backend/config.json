@@ -143,6 +143,7 @@
     "personality_engine": true,
     "neuron_os": true,
     "developer_mode": true,
+    "blender_agent": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -176,5 +177,11 @@
       "window_focus"
     ],
     "_comment": "Workflow Recording: multi-channel capture + replay with variables, loops, conditions. Empty store = backend/data/workflows.json."
+  },
+  "blender_agent": {
+    "enabled": true,
+    "blender_path": "",
+    "background": true,
+    "_comment": "Empty blender_path = auto-detect blender on PATH or Program Files. Scripts/assets under backend/data/blender_agent/."
   }
 }

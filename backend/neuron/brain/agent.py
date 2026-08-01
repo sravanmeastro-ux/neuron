@@ -413,6 +413,38 @@ def run(
     except Exception as exc:
         _log(f"developer mode skipped: {exc}")
 
+    # Blender Agent — bpy expert workflows (compose-only; does not modify cores)
+    try:
+        from neuron.blender_agent import maybe_handle_blender
+        bl = maybe_handle_blender(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if bl is not None:
+            say, acted, bmeta = bl
+            meta.update({k: v for k, v in (bmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (bmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("blender_agent", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((bmeta or {}).get("path") or "blender_agent"),
+            )
+    except Exception as exc:
+        _log(f"blender_agent skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.

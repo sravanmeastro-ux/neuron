@@ -367,6 +367,48 @@ def ensure_bootstrapped() -> None:
     _bootstrap_personality()
     _bootstrap_neuron_os()
     _bootstrap_developer()
+    _bootstrap_blender_agent()
+
+
+def _bootstrap_blender_agent() -> None:
+    try:
+        from neuron.blender_agent import (
+            tool_blender_run,
+            tool_blender_script,
+            tool_blender_status,
+        )
+        register(
+            "blender_status",
+            tool_blender_status,
+            description="Blender Agent status: bpy CLI availability + asset library",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "blender_run",
+            tool_blender_run,
+            description="Blender AI expert: create/import/export/materials/geo nodes/rig/animate/light/render/physics",
+            args_schema={"request": "str", "capability": "str", "dry_run": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+        register(
+            "blender_script",
+            tool_blender_script,
+            description="Run or save a custom Blender Python (bpy) script",
+            args_schema={"source": "str", "dry_run": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=False,
+            control_methods=["api"],
+        )
+        print("[tools] blender agent tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] blender_agent bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_developer() -> None:
