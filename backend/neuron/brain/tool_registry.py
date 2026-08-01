@@ -374,6 +374,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_self_healing()
     _bootstrap_workflow_intelligence()
     _bootstrap_plugin_market()
+    _bootstrap_multi_device()
+
+
+def _bootstrap_multi_device() -> None:
+    try:
+        from neuron.multi_device import tool_multi_device_run, tool_multi_device_status
+        register(
+            "multi_device_status",
+            tool_multi_device_status,
+            description="Multi-device status: local identity + fleet + sync channels",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "multi_device_run",
+            tool_multi_device_run,
+            description="Multi-device: register/pair devices, sync memory/tasks/voice/plugins/projects, control peers",
+            args_schema={"request": "str", "capability": "str", "name": "str", "kind": "str", "channels": "list", "command": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "network"],
+        )
+        print("[tools] multi-device tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] multi_device bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_plugin_market() -> None:

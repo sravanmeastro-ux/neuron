@@ -546,6 +546,38 @@ def run(
     except Exception as exc:
         _log(f"plugin_market skipped: {exc}")
 
+    # Multi-Device — desktop/laptop/remote/VM/cloud control + sync
+    try:
+        from neuron.multi_device import maybe_handle_multi_device
+        mdh = maybe_handle_multi_device(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if mdh is not None:
+            say, acted, mdmeta = mdh
+            meta.update({k: v for k, v in (mdmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (mdmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("multi_device", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((mdmeta or {}).get("path") or "multi_device"),
+            )
+    except Exception as exc:
+        _log(f"multi_device skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer
