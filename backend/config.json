@@ -151,6 +151,7 @@
     "workflow_intelligence": true,
     "plugin_market": true,
     "multi_device": true,
+    "production_readiness": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -178,6 +179,12 @@
     "sync_channels": ["memory", "tasks", "voice", "plugins", "projects"],
     "default_port": 8765,
     "_comment": "Device fleet under backend/data/multi_device/. File-bus sync + optional HTTP notify to peers."
+  },
+  "production": {
+    "enabled": true,
+    "version": "1.0.0",
+    "default_wizard_preset": "balanced",
+    "_comment": "Public release tooling: audit/diagnostics/wizard under neuron/production; installer scripts in install/."
   },
   "workflows": {
     "enabled": true,

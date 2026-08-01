@@ -375,6 +375,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_workflow_intelligence()
     _bootstrap_plugin_market()
     _bootstrap_multi_device()
+    _bootstrap_production()
+
+
+def _bootstrap_production() -> None:
+    try:
+        from neuron.production import tool_production_run, tool_production_status
+        register(
+            "production_status",
+            tool_production_status,
+            description="Production readiness status: version, updates, wizard preset",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "production_run",
+            tool_production_run,
+            description="Production: release audit, diagnostics, config wizard, install, update check",
+            args_schema={"request": "str", "capability": "str", "preset": "str", "dry_run": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "filesystem"],
+        )
+        print("[tools] production readiness tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] production bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_multi_device() -> None:

@@ -578,6 +578,38 @@ def run(
     except Exception as exc:
         _log(f"multi_device skipped: {exc}")
 
+    # Production Readiness — audit, diagnostics, wizard, installer, updater
+    try:
+        from neuron.production import maybe_handle_production
+        prh = maybe_handle_production(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if prh is not None:
+            say, acted, prmeta = prh
+            meta.update({k: v for k, v in (prmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (prmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("production", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((prmeta or {}).get("path") or "production"),
+            )
+    except Exception as exc:
+        _log(f"production skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer
