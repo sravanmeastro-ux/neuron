@@ -381,6 +381,38 @@ def run(
     except Exception as exc:
         _log(f"neuron_os skipped: {exc}")
 
+    # GitHub Agent — repo/PR/CI intelligence (before Developer so changelog/CI/commit review win)
+    try:
+        from neuron.github_agent import maybe_handle_github
+        ghh = maybe_handle_github(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if ghh is not None:
+            say, acted, gmeta = ghh
+            meta.update({k: v for k, v in (gmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (gmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("github_agent", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((gmeta or {}).get("path") or "github_agent"),
+            )
+    except Exception as exc:
+        _log(f"github_agent skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer

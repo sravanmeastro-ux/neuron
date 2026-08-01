@@ -145,6 +145,7 @@
     "developer_mode": true,
     "blender_agent": true,
     "unreal_agent": true,
+    "github_agent": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -190,5 +191,10 @@
     "engine_path": "",
     "project_path": "",
     "_comment": "Empty engine_path = auto-detect Epic Games/UE_*. Empty project_path = search for .uproject. Artifacts under backend/data/unreal_agent/."
+  },
+  "github_agent": {
+    "enabled": true,
+    "repo_path": "",
+    "_comment": "Empty repo_path = auto-detect .git from cwd/workspace. Uses git + gh CLI. Changelog drafts under backend/data/github_agent/."
   }
 }

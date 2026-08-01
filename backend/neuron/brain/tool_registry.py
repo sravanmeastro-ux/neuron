@@ -369,6 +369,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_developer()
     _bootstrap_blender_agent()
     _bootstrap_unreal_agent()
+    _bootstrap_github_agent()
+
+
+def _bootstrap_github_agent() -> None:
+    try:
+        from neuron.github_agent import tool_github_run, tool_github_status
+        register(
+            "github_status",
+            tool_github_status,
+            description="GitHub Agent status: repo remote + gh CLI",
+            args_schema={"repo": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "github_run",
+            tool_github_run,
+            description="GitHub intelligence: commit/PR review, changelog, CI, conflicts, issues, tags",
+            args_schema={"request": "str", "capability": "str", "confirmed": "bool", "repo": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api"],
+        )
+        print("[tools] github agent tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] github_agent bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_unreal_agent() -> None:
