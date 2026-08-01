@@ -1,0 +1,15 @@
+{
+  "detect_accuracy": 1.0,
+  "non_cu_skip_accuracy": 1.0,
+  "plan_accuracy": 1.0,
+  "taskgraph_ok": true,
+  "observe_ms": 277.14,
+  "drag_ok": true,
+  "planner_latency_ms": {
+    "mean": 1.1,
+    "max": 6.92
+  },
+  "untouched_ok": true,
+  "note": "Live success/recovery rates need interactive UI; plan+detect measured here.",
+  "pass": true
+}

@@ -269,6 +269,38 @@ def run(
     except Exception as exc:
         _log(f"taskplan skipped: {exc}")
 
+    # Computer Use Agent — operate any app (composes screen / taskplan / vision)
+    try:
+        from neuron.computer_use import maybe_handle_computer_use
+        cu = maybe_handle_computer_use(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if cu is not None:
+            say, acted, cmeta = cu
+            meta.update({k: v for k, v in (cmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (cmeta or {}).get("needs_confirm"),
+                "recovered": bool((cmeta or {}).get("recovered")),
+                "steps": (((cmeta or {}).get("report") or {}).get("actions") or []),
+            }
+            tr.user(raw)
+            tr.final("computer_use", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((cmeta or {}).get("path") or "computer_use"),
+            )
+    except Exception as exc:
+        _log(f"computer_use skipped: {exc}")
+
     # V3 CapabilityRouter — high-confidence capabilities.
     # Category A: FastIntentRouter executes tools directly (no AgentLoop).
     # On failure → AgentLoop fallback. Category B / low conf → AgentLoop.

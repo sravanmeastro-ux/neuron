@@ -548,6 +548,42 @@ def _bootstrap_new() -> None:
     except Exception as exc:
         print(f"[tools] taskplan tools skipped: {exc}", flush=True)
 
+    try:
+        from neuron.computer_use.agent import tool_computer_use_agent
+        from neuron.computer_use.primitives import tool_drag_drop, tool_upload_file
+        register(
+            "computer_use_agent",
+            tool_computer_use_agent,
+            description="Computer Use Agent: operate any Windows app (click/type/drag/upload/forms)",
+            args_schema={"goal": "str", "request": "str", "confirmed": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["uia", "ocr", "perception", "input"],
+        )
+        register(
+            "drag_drop",
+            tool_drag_drop,
+            description="Drag mouse from (x1,y1) to (x2,y2)",
+            args_schema={"x1": "int", "y1": "int", "x2": "int", "y2": "int"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["input"],
+        )
+        register(
+            "upload_file",
+            tool_upload_file,
+            description="Type a file path into an Open/Upload dialog",
+            args_schema={"path": "str", "method": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["input", "filesystem"],
+        )
+    except Exception as exc:
+        print(f"[tools] computer_use tools skipped: {exc}", flush=True)
+
 
 def _default_methods(name: str) -> list[str]:
     n = name or ""
