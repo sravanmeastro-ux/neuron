@@ -514,6 +514,38 @@ def run(
     except Exception as exc:
         _log(f"workflow_intelligence skipped: {exc}")
 
+    # Plugin Market — production SDK: install/update/hot-reload/scaffold/permissions
+    try:
+        from neuron.plugin_market import maybe_handle_plugin_market
+        pmh = maybe_handle_plugin_market(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if pmh is not None:
+            say, acted, pmmeta = pmh
+            meta.update({k: v for k, v in (pmmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (pmmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("plugin_market", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((pmmeta or {}).get("path") or "plugin_market"),
+            )
+    except Exception as exc:
+        _log(f"plugin_market skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer

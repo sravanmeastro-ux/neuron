@@ -69,6 +69,8 @@ class PluginManifest:
     description: str = ""
     docs: str = "README.md"
     author: str = "NEURON"
+    api_version: str = "1"  # Plugin Host API version this package targets
+    homepage: str = ""
     permissions: PermissionSpec = field(default_factory=PermissionSpec)
     config: ConfigSpec = field(default_factory=ConfigSpec)
     dependencies: DependencySpec = field(default_factory=DependencySpec)
@@ -83,6 +85,8 @@ class PluginManifest:
             "description": self.description,
             "docs": self.docs,
             "author": self.author,
+            "api_version": self.api_version,
+            "homepage": self.homepage,
             "permissions": self.permissions.to_dict(),
             "config": self.config.to_dict(),
             "dependencies": self.dependencies.to_dict(),
@@ -102,6 +106,8 @@ class PluginManifest:
             description=str(d.get("description") or ""),
             docs=str(d.get("docs") or "README.md"),
             author=str(d.get("author") or "NEURON"),
+            api_version=str(d.get("api_version") or "1"),
+            homepage=str(d.get("homepage") or ""),
             permissions=PermissionSpec(
                 risk_ceiling=str(perms.get("risk_ceiling") or "confirm"),
                 control_methods=list(perms.get("control_methods") or ["api"]),

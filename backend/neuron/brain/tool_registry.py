@@ -373,6 +373,34 @@ def ensure_bootstrapped() -> None:
     _bootstrap_project_intelligence()
     _bootstrap_self_healing()
     _bootstrap_workflow_intelligence()
+    _bootstrap_plugin_market()
+
+
+def _bootstrap_plugin_market() -> None:
+    try:
+        from neuron.plugin_market import tool_plugin_market_run, tool_plugin_market_status
+        register(
+            "plugin_market_status",
+            tool_plugin_market_status,
+            description="Plugin Market status: loaded plugins, updates, hot-reload watcher",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "plugin_market_run",
+            tool_plugin_market_run,
+            description="Plugin Market: install/uninstall/update, hot reload, scaffold, trust grants",
+            args_schema={"request": "str", "capability": "str", "id": "str", "source": "str", "path": "str"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["api", "filesystem"],
+        )
+        print("[tools] plugin market tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] plugin_market bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_workflow_intelligence() -> None:

@@ -23,6 +23,14 @@ NEURON_VERSION = "4.10.0"
 
 def plugin_roots() -> list[Path]:
     roots = [BUILTIN_ROOT]
+    # Market install directory (production SDK)
+    try:
+        from neuron.plugin_market.paths import installed_root
+        ir = installed_root()
+        if ir.is_dir():
+            roots.append(ir)
+    except Exception:
+        pass
     try:
         import json as _json
         from pathlib import Path as P
@@ -37,7 +45,16 @@ def plugin_roots() -> list[Path]:
             roots.append(Path(p))
     except Exception:
         pass
-    return roots
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    out: list[Path] = []
+    for r in roots:
+        key = str(r.resolve()) if r.exists() else str(r)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
 
 
 def discover() -> list[Path]:

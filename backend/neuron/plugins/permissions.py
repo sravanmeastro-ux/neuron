@@ -57,7 +57,37 @@ def check_dependencies(manifest: PluginManifest, *, neuron_version: str = "4.10.
             __import__(pkg)
         except Exception:
             errors.append(f"Missing python package: {pkg}")
+    if dep.plugins:
+        try:
+            from neuron.plugins import loader
+            loaded = {p.get("id") for p in loader.list_plugins() if p.get("enabled")}
+            discovered: set[str] = set()
+            for root in loader.discover():
+                try:
+                    data = json_loads_manifest(root)
+                    if data.get("id"):
+                        discovered.add(str(data["id"]))
+                except Exception:
+                    continue
+            for pid in dep.plugins:
+                if pid in loaded or pid in discovered:
+                    continue
+                errors.append(f"Missing required plugin: {pid}")
+        except Exception as exc:
+            errors.append(f"Plugin dependency check failed: {exc}")
     return errors
+
+
+def json_loads_manifest(root) -> dict:
+    import json
+    from pathlib import Path
+    return json.loads(Path(root).joinpath("plugin.json").read_text(encoding="utf-8"))
+
+
+def compare_versions(a: str, b: str) -> int:
+    """Return -1 if a<b, 0 if equal, 1 if a>b."""
+    pa, pb = parse_semver(a), parse_semver(b)
+    return (pa > pb) - (pa < pb)
 
 
 def validate_manifest(manifest: PluginManifest) -> list[str]:
