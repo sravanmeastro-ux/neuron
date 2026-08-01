@@ -686,6 +686,44 @@ def _bootstrap_new() -> None:
         print(f"[tools] taskplan tools skipped: {exc}", flush=True)
 
     try:
+        from neuron.autonomous import (
+            tool_autonomous_assess,
+            tool_autonomous_progress,
+            tool_autonomous_run,
+        )
+        register(
+            "autonomous_run",
+            tool_autonomous_run,
+            description="Autonomous Agent: goal plan → decompose → execute → verify → recover",
+            args_schema={"request": "str", "goal": "str", "confirmed": "bool"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["uia", "api", "perception"],
+        )
+        register(
+            "autonomous_progress",
+            tool_autonomous_progress,
+            description="Progress tracking for the active autonomous / taskplan run",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "autonomous_assess",
+            tool_autonomous_assess,
+            description="Plan a goal and return risk assessment without executing",
+            args_schema={"request": "str", "goal": "str"},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        print("[tools] autonomous agent tools registered", flush=True)
+    except Exception as exc:
+        print(f"[tools] autonomous tools skipped: {exc}", flush=True)
+
+    try:
         from neuron.computer_use.agent import tool_computer_use_agent
         from neuron.computer_use.primitives import tool_drag_drop, tool_upload_file
         register(

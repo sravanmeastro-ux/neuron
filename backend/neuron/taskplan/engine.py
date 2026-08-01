@@ -410,7 +410,25 @@ def handle(
     """
     Entry for AgentLoop bridge.
     Returns None if not a workflow (caller continues normal routing).
+
+    When autonomous_execution is enabled (default), delegates to the
+    Autonomous Agent engine (goal verify, dynamic replan, risk, etc.).
     """
+    # Prefer fully autonomous execution engine
+    try:
+        import json
+        from pathlib import Path
+        cfg = json.loads((Path(__file__).resolve().parents[2] / "config.json").read_text(encoding="utf-8"))
+        auto_on = (cfg.get("agent") or {}).get("autonomous_execution", True)
+    except Exception:
+        auto_on = True
+    if auto_on:
+        try:
+            from neuron.autonomous.engine import handle_autonomous
+            return handle_autonomous(text, loop=loop, confirmed=confirmed, force=force)
+        except Exception as exc:
+            _log(f"autonomous fallback to classic: {exc}")
+
     raw = (text or "").strip()
     if not raw:
         return None
