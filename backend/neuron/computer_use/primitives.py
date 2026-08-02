@@ -3,13 +3,35 @@
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
 from neuron.windows.result import fail, ok
 
+# Set by UI Grounding pipeline after visual match — allows one raw click.
+_RAW_CLICK_ALLOWED: ContextVar[bool] = ContextVar("raw_click_allowed", default=False)
 
-def click_xy(x: int, y: int, *, button: str = "left", clicks: int = 1) -> Any:
+
+def allow_raw_click(enabled: bool = True):
+    return _RAW_CLICK_ALLOWED.set(enabled)
+
+
+def reset_raw_click(token) -> None:
+    try:
+        _RAW_CLICK_ALLOWED.reset(token)
+    except Exception:
+        pass
+
+
+def click_xy(x: int, y: int, *, button: str = "left", clicks: int = 1, force: bool = False) -> Any:
+    if not force and not _RAW_CLICK_ALLOWED.get():
+        # Enforce visual grounding for external callers
+        try:
+            from neuron.ui_grounding.gate import require_grounding_for_xy
+            return require_grounding_for_xy(int(x), int(y))
+        except Exception as exc:
+            return fail(f"Ungrounded click refused: {exc}")
     try:
         import pyautogui
         pyautogui.click(int(x), int(y), clicks=int(clicks), button=button)

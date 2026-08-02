@@ -610,6 +610,38 @@ def run(
     except Exception as exc:
         _log(f"production skipped: {exc}")
 
+    # UI Grounding — observe/detect/ground before any UI click
+    try:
+        from neuron.ui_grounding import maybe_handle_ui_grounding
+        ugh = maybe_handle_ui_grounding(
+            raw,
+            normalized=resolved_request,
+            loop=loop,
+            confirmed=confirmed,
+        )
+        if ugh is not None:
+            say, acted, ugmeta = ugh
+            meta.update({k: v for k, v in (ugmeta or {}).items() if k not in ("loop",)})
+            loop_meta = {
+                "needs_confirm": (ugmeta or {}).get("needs_confirm"),
+                "recovered": False,
+                "steps": [],
+            }
+            tr.user(raw)
+            tr.final("ui_grounding", say or "")
+            return _finish(
+                say,
+                acted,
+                meta,
+                loop_meta,
+                None,
+                tr,
+                t0,
+                path=str((ugmeta or {}).get("path") or "ui_grounding"),
+            )
+    except Exception as exc:
+        _log(f"ui_grounding skipped: {exc}")
+
     # Developer Mode — AI software engineer workflows (compose-only; does not modify cores)
     try:
         from neuron.developer import maybe_handle_developer

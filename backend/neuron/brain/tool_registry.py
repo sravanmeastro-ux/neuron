@@ -376,6 +376,54 @@ def ensure_bootstrapped() -> None:
     _bootstrap_plugin_market()
     _bootstrap_multi_device()
     _bootstrap_production()
+    _bootstrap_ui_grounding()
+
+
+def _bootstrap_ui_grounding() -> None:
+    try:
+        from neuron.ui_grounding import grounded_click, tool_ui_ground_run, tool_ui_ground_status
+        register(
+            "ui_ground_status",
+            tool_ui_ground_status,
+            description="UI Grounding Engine status: monitors + DPI + policy",
+            args_schema={},
+            risk="safe",
+            overwrite=True,
+            planner_visible=True,
+        )
+        register(
+            "ui_ground_run",
+            tool_ui_ground_run,
+            description="Ground UI target visually then click/verify (screenshot→detect→match→click→verify)",
+            args_schema={"target": "str", "name": "str", "app": "str", "dry_run": "bool", "min_confidence": "float"},
+            risk="confirm",
+            overwrite=True,
+            planner_visible=True,
+            control_methods=["perception", "uia", "ocr", "coords"],
+        )
+        # Gate the global click tool — never click without visual grounding
+        register(
+            "click",
+            grounded_click,
+            description="Grounded click only: observe screen, match target, then click and verify",
+            params={
+                "name": {"type": "str", "required": False},
+                "text": {"type": "str", "required": False},
+                "query": {"type": "str", "required": False},
+                "x": {"type": "int", "required": False},
+                "y": {"type": "int", "required": False},
+                "app": {"type": "str", "required": False},
+                "min_confidence": {"type": "float", "required": False},
+                "dry_run": {"type": "bool", "required": False},
+            },
+            risk="safe",
+            control_methods=["perception", "uia", "ocr", "coords"],
+            overwrite=True,
+            planner_visible=True,
+        )
+        print("[tools] ui grounding tools registered (click gated)", flush=True)
+    except Exception as exc:
+        print(f"[tools] ui_grounding bootstrap skipped: {exc}", flush=True)
 
 
 def _bootstrap_production() -> None:

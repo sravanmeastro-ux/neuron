@@ -152,6 +152,7 @@
     "plugin_market": true,
     "multi_device": true,
     "production_readiness": true,
+    "ui_grounding": true,
     "max_replans": 3,
     "max_step_retries": 2,
     "max_loop_iterations": 12,
@@ -176,7 +177,13 @@
   },
   "multi_device": {
     "enabled": true,
-    "sync_channels": ["memory", "tasks", "voice", "plugins", "projects"],
+    "sync_channels": [
+      "memory",
+      "tasks",
+      "voice",
+      "plugins",
+      "projects"
+    ],
     "default_port": 8765,
     "_comment": "Device fleet under backend/data/multi_device/. File-bus sync + optional HTTP notify to peers."
   },
@@ -185,6 +192,13 @@
     "version": "1.0.0",
     "default_wizard_preset": "balanced",
     "_comment": "Public release tooling: audit/diagnostics/wizard under neuron/production; installer scripts in install/."
+  },
+  "ui_grounding": {
+    "enabled": true,
+    "min_confidence": 0.35,
+    "max_retries": 3,
+    "allow_scroll": true,
+    "_comment": "Never click without screenshot→detect→ground→verify. Gates tool click + computer_use.click_xy."
   },
   "workflows": {
     "enabled": true,
@@ -242,7 +256,14 @@
   },
   "workflow_intelligence": {
     "enabled": true,
-    "observe_apps": ["cursor", "github", "blender", "unreal", "vscode", "browser"],
+    "observe_apps": [
+      "cursor",
+      "github",
+      "blender",
+      "unreal",
+      "vscode",
+      "browser"
+    ],
     "_comment": "Learns reusable workflows from app observation; presets stored via workflows.json with tag workflow_intelligence."
   }
 }
